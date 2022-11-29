@@ -28,6 +28,7 @@ defmodule Bandit.HTTP1.Handler do
     end
   end
 
+  @compile {:inline, determine_scheme: 2, determine_host_and_port: 3, determine_path_and_query: 1}
   defp build_conn(req) do
     with {:ok, headers, method, request_target, req} <- Adapter.read_headers(req),
          {:ok, scheme} <- determine_scheme(request_target, req),
