@@ -111,12 +111,18 @@ defmodule Bandit.WebSocket.Handshake do
     put_resp_header(conn, "sec-websocket-extensions", extensions)
   end
 
-  defp header_contains?(conn, field, value) do
+  defp header_contains?(%Plug.Conn{req_headers: headers}, field, value) do
     value = String.downcase(value, :ascii)
 
-    conn
-    |> get_req_header(field)
-    |> Enum.flat_map(&Plug.Conn.Utils.list/1)
-    |> Enum.any?(&(String.downcase(&1, :ascii) == value))
+    Enum.any?(headers, fn
+      {^field, header_value} ->
+        header_value
+        |> String.downcase(:ascii)
+        |> Plug.Conn.Utils.list()
+        |> Enum.member?(value)
+
+      _ ->
+        false
+    end)
   end
 end
