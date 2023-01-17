@@ -37,7 +37,8 @@ defmodule Bandit.MixProject do
       {:ex_doc, "~> 0.24", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
       {:credo, "~> 1.0", only: [:dev, :test], runtime: false},
-      {:mix_test_watch, "~> 1.0", only: :dev, runtime: false}
+      {:mix_test_watch, "~> 1.0", only: :dev, runtime: false},
+      {:bandit_native, ">= 0.0.0", optional: true}
     ]
   end
 
