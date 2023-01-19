@@ -64,7 +64,7 @@ defmodule Bandit.HTTP2.Connection do
         socket,
         %Connection{fragment_frame: %Frame.Headers{stream_id: stream_id}} = connection
       ) do
-    header_block = connection.fragment_frame.fragment <> frame.fragment
+    header_block = [connection.fragment_frame.fragment, frame.fragment]
     header_frame = %{connection.fragment_frame | end_headers: true, fragment: header_block}
     handle_frame(header_frame, socket, %{connection | fragment_frame: nil})
   end
@@ -74,7 +74,7 @@ defmodule Bandit.HTTP2.Connection do
         _socket,
         %Connection{fragment_frame: %Frame.Headers{stream_id: stream_id}} = connection
       ) do
-    header_block = connection.fragment_frame.fragment <> frame.fragment
+    header_block = [connection.fragment_frame.fragment, frame.fragment]
     header_frame = %{connection.fragment_frame | fragment: header_block}
     {:continue, %{connection | fragment_frame: header_frame}}
   end
@@ -173,7 +173,7 @@ defmodule Bandit.HTTP2.Connection do
   end
 
   def handle_frame(%Frame.Headers{end_headers: true} = frame, socket, connection) do
-    with block <- frame.fragment,
+    with block <- IO.iodata_to_binary(frame.fragment),
          end_stream <- frame.end_stream,
          {:hpack, {:ok, headers, recv_hpack_state}} <-
            {:hpack, HPAX.decode(block, connection.recv_hpack_state)},
