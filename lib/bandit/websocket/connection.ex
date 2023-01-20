@@ -35,7 +35,7 @@ defmodule Bandit.WebSocket.Connection do
         do_inflate(frame, socket, connection)
 
       %Frame.Text{fin: true} = frame ->
-        if String.valid?(frame.data) do
+        if Bandit.Unicode.valid_utf8?(frame.data) do
           connection.websock.handle_in({frame.data, opcode: :text}, connection.websock_state)
           |> handle_continutation(socket, connection)
         else
