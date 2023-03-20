@@ -17,8 +17,6 @@ defmodule Bandit.HTTP1.Adapter do
             metrics: %{},
             opts: []
 
-  # credo:disable-for-this-file Credo.Check.Design.AliasUsage
-
   ################
   # Header Reading
   ################
