@@ -121,7 +121,7 @@ defmodule Bandit.HTTP2.StreamTask do
 
   # RFC9113§8.3.1 - only request pseudo headers may appear
   defp pseudo_headers_all_request(headers) do
-    if Enum.any?(headers, fn {key, _value} -> key not in ~w[:method :scheme :authority :path] end),
+    if Enum.any?(headers, fn {key, _value} -> key not in ~w[:method :scheme :authority :path :protocol] end),
       do: {:error, "Received invalid pseudo header"},
       else: :ok
   end

@@ -7,7 +7,8 @@ defmodule Bandit.HTTP2.Settings do
             max_concurrent_streams: :infinity,
             initial_window_size: 65_535,
             max_frame_size: 16_384,
-            max_header_list_size: :infinity
+            max_header_list_size: :infinity,
+            enable_connect_protocol: true
 
   @typedoc "A collection of settings as defined in RFC9113§6.5"
   @type t :: %__MODULE__{
@@ -15,6 +16,7 @@ defmodule Bandit.HTTP2.Settings do
           max_concurrent_streams: non_neg_integer() | :infinity,
           initial_window_size: non_neg_integer(),
           max_frame_size: non_neg_integer(),
-          max_header_list_size: non_neg_integer() | :infinity
+          max_header_list_size: non_neg_integer() | :infinity,
+          enable_connect_protocol: boolean()
         }
 end

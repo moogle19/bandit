@@ -114,6 +114,8 @@ defmodule Bandit.HTTP2.Frame.Settings do
           {:max_frame_size, value} -> <<0x05::16, value::32>>
           {:max_header_list_size, :infinity} -> <<>>
           {:max_header_list_size, value} -> <<0x06::16, value::32>>
+          {:enable_connect_protocol, true} -> <<0x08::16, 1::32>>
+          {:enable_connect_protocol, false} -> <<>>
         end)
 
       [{0x4, 0x0, 0, payload}]

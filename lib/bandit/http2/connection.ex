@@ -185,6 +185,7 @@ defmodule Bandit.HTTP2.Connection do
          end_stream <- frame.end_stream,
          {:hpack, {:ok, headers, recv_hpack_state}} <-
            {:hpack, HPAX.decode(block, connection.recv_hpack_state)},
+        #  _ <- IO.inspect(headers, label: "Headers"),
          {:ok, stream} <- StreamCollection.get_stream(connection.streams, frame.stream_id),
          true <- accept_stream?(connection),
          true <- accept_headers?(headers, connection.opts, stream),
@@ -199,7 +200,9 @@ defmodule Bandit.HTTP2.Connection do
              connection.opts
            ),
          {:ok, stream} <- Stream.recv_end_of_stream(stream, end_stream),
+        #  {:ok, stream} <- maybe_upgrade_stream(stream, headers),
          {:ok, streams} <- StreamCollection.put_stream(connection.streams, stream) do
+      # TODO: Update stream to websocket
       {:continue, %{connection | recv_hpack_state: recv_hpack_state, streams: streams}}
     else
       {:hpack, _} ->
@@ -497,5 +500,14 @@ defmodule Bandit.HTTP2.Connection do
 
   defp send_frame(frame, socket, connection) do
     Socket.send(socket, Frame.serialize(frame, connection.remote_settings.max_frame_size))
+  end
+
+  defp maybe_upgrade_stream(stream, headers) do
+    if List.keyfind(headers, ":protocol", 0) == {":protocol", "websocket"} do
+      IO.inspect("NEEDS UPGRADE")
+      {:ok, stream}
+    else
+      {:ok, stream}
+    end
   end
 end

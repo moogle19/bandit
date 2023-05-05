@@ -206,7 +206,15 @@ defmodule Bandit.HTTP2.Adapter do
   end
 
   @impl Plug.Conn.Adapter
-  def upgrade(_req, _upgrade, _opts), do: {:error, :not_supported}
+  def upgrade(req, type, opts) do
+    IO.inspect(req)
+    {:error, :not_supported}
+  end
+
+  def upgrade(req, :websocket, opts) do
+    IO.inspect(req)
+    {:ok, %{req | upgrade: {:websocket, opts, req.opts.websocket}}}
+  end
 
   @impl Plug.Conn.Adapter
   def push(_adapter, _path, _headers), do: {:error, :not_supported}

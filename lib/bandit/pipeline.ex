@@ -24,6 +24,7 @@ defmodule Bandit.Pipeline do
         ) :: {:ok, Plug.Conn.t()} | {:ok, :websocket, tuple()} | {:error, term()}
   def run(req, transport_info, method, request_target, headers, plug) do
     with {:ok, conn} <- build_conn(req, transport_info, method, request_target, headers),
+         _ <- IO.inspect(plug),
          {:ok, conn} <- call_plug(conn, plug),
          {:ok, :no_upgrade} <- maybe_upgrade(conn) do
       commit_response(conn, plug)
