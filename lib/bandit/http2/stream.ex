@@ -127,7 +127,7 @@ defmodule Bandit.HTTP2.Stream do
 
   # RFC9113§8.1 - no pseudo headers
   defp no_pseudo_headers(headers, stream_id) do
-    if Enum.any?(headers, fn {key, _value} -> String.starts_with?(key, ":") end) do
+    if Enum.any?(headers, &Bandit.Headers.pseudo_header?/1) do
       {:error,
        {:stream, stream_id, Errors.protocol_error(), "Received trailers with pseudo headers"}}
     else

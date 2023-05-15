@@ -111,10 +111,9 @@ defmodule Bandit.HTTP2.StreamTask do
 
   # RFC9113§8.3 - pseudo headers must appear first
   defp split_headers(headers) do
-    {pseudo_headers, headers} =
-      Enum.split_while(headers, fn {key, _value} -> String.starts_with?(key, ":") end)
+    {pseudo_headers, headers} = Enum.split_while(headers, &Bandit.Headers.pseudo_header?/1)
 
-    if Enum.any?(headers, fn {key, _value} -> String.starts_with?(key, ":") end),
+    if Enum.any?(headers, &Bandit.Headers.pseudo_header?/1),
       do: {:error, "Received pseudo headers after regular one"},
       else: {:ok, pseudo_headers, headers}
   end

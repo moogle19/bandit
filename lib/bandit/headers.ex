@@ -11,6 +11,9 @@ defmodule Bandit.Headers do
     end
   end
 
+  def pseudo_header?({<<":", _rest::binary>>, _value}), do: true
+  def pseudo_header?({_key, _value}), do: false
+
   # covers ipv6 addresses, which look like this: `[::1]:4000` as defined in RFC3986
   def parse_hostlike_header("[" <> _ = host_header) do
     host_header
