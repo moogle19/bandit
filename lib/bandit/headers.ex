@@ -49,6 +49,9 @@ defmodule Bandit.Headers do
     end
   end
 
+  def pseudo_header?({<<":", _rest::binary>>, _value}), do: true
+  def pseudo_header?(_other), do: false
+
   defp parse_content_length(value) do
     case Integer.parse(value) do
       {length, ""} when length >= 0 ->
