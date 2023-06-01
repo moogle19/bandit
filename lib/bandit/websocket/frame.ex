@@ -15,6 +15,8 @@ defmodule Bandit.WebSocket.Frame do
           | Frame.Ping.t()
           | Frame.Pong.t()
 
+  defguardp is_valid_length(length, max_length) when max_length == 0 or length <= max_length
+
   @spec deserialize(binary(), non_neg_integer()) ::
           {{:ok, frame()}, iodata()} | {{:error, term()}, iodata()}
   def deserialize(
@@ -22,7 +24,7 @@ defmodule Bandit.WebSocket.Frame do
           payload::binary-size(length), rest::binary>>,
         max_frame_size
       )
-      when max_frame_size == 0 or length <= max_frame_size do
+      when is_valid_length(length, max_frame_size) do
     to_frame(fin, compressed, rsv, opcode, mask, payload, rest)
   end
 
@@ -31,7 +33,7 @@ defmodule Bandit.WebSocket.Frame do
           payload::binary-size(length), rest::binary>>,
         max_frame_size
       )
-      when max_frame_size == 0 or length <= max_frame_size do
+      when is_valid_length(length, max_frame_size) do
     to_frame(fin, compressed, rsv, opcode, mask, payload, rest)
   end
 
@@ -40,7 +42,7 @@ defmodule Bandit.WebSocket.Frame do
           payload::binary-size(length), rest::binary>>,
         max_frame_size
       )
-      when length <= 125 and (max_frame_size == 0 or length <= max_frame_size) do
+      when length <= 125 and is_valid_length(length, max_frame_size) do
     to_frame(fin, compressed, rsv, opcode, mask, payload, rest)
   end
 
