@@ -69,33 +69,36 @@ defmodule Bandit.HTTP2.Adapter do
         if remaining_length >= 0 do
           do_read_req_body(adapter, timeout, remaining_length, acc)
         else
-          bytes_read = IO.iodata_length(acc)
+          bytes = wrap_req_body(acc)
+          bytes_read = byte_size(bytes)
 
           metrics =
             adapter.metrics
             |> Map.update(:req_body_bytes, bytes_read, &(&1 + bytes_read))
 
-          {:more, wrap_req_body(acc), %{adapter | metrics: metrics}}
+          {:more, bytes, %{adapter | metrics: metrics}}
         end
 
       :end_stream ->
-        bytes_read = IO.iodata_length(acc)
+        bytes = wrap_req_body(acc)
+        bytes_read = byte_size(bytes)
 
         metrics =
           adapter.metrics
           |> Map.update(:req_body_bytes, bytes_read, &(&1 + bytes_read))
           |> Map.put(:req_body_end_time, Bandit.Telemetry.monotonic_time())
 
-        {:ok, wrap_req_body(acc), %{adapter | end_stream: true, metrics: metrics}}
+        {:ok, bytes, %{adapter | end_stream: true, metrics: metrics}}
     after
       timeout ->
-        bytes_read = IO.iodata_length(acc)
+        bytes = wrap_req_body(acc)
+        bytes_read = byte_size(bytes)
 
         metrics =
           adapter.metrics
           |> Map.update(:req_body_bytes, bytes_read, &(&1 + bytes_read))
 
-        {:more, wrap_req_body(acc), %{adapter | metrics: metrics}}
+        {:more, bytes, %{adapter | metrics: metrics}}
     end
   end
 
