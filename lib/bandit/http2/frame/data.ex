@@ -27,26 +27,26 @@ defmodule Bandit.HTTP2.Frame.Data do
   end
 
   def deserialize(flags, stream_id, <<padding_length::8, rest::binary>>)
-      when set?(flags, @padding_bit) and byte_size(rest) >= padding_length do
+      when is_set(flags, @padding_bit) and byte_size(rest) >= padding_length do
     {:ok,
      %__MODULE__{
        stream_id: stream_id,
-       end_stream: set?(flags, @end_stream_bit),
+       end_stream: is_set(flags, @end_stream_bit),
        data: binary_part(rest, 0, byte_size(rest) - padding_length)
      }}
   end
 
-  def deserialize(flags, stream_id, <<data::binary>>) when clear?(flags, @padding_bit) do
+  def deserialize(flags, stream_id, <<data::binary>>) when is_clear(flags, @padding_bit) do
     {:ok,
      %__MODULE__{
        stream_id: stream_id,
-       end_stream: set?(flags, @end_stream_bit),
+       end_stream: is_set(flags, @end_stream_bit),
        data: data
      }}
   end
 
   def deserialize(flags, _stream_id, <<_padding_length::8, _rest::binary>>)
-      when set?(flags, @padding_bit) do
+      when is_set(flags, @padding_bit) do
     {:error,
      {:connection, Errors.protocol_error(),
       "DATA frame with invalid padding length (RFC9113§6.1)"}}

@@ -21,7 +21,7 @@ defmodule Bandit.HTTP2.Frame.Settings do
 
   @spec deserialize(Frame.flags(), Bandit.HTTP2.Stream.stream_id(), iodata()) ::
           {:ok, t()} | {:error, Connection.error()}
-  def deserialize(flags, 0, payload) when clear?(flags, @ack_bit) do
+  def deserialize(flags, 0, payload) when is_clear(flags, @ack_bit) do
     payload
     |> Stream.unfold(fn
       <<>> -> nil
@@ -71,11 +71,11 @@ defmodule Bandit.HTTP2.Frame.Settings do
     end
   end
 
-  def deserialize(flags, 0, <<>>) when set?(flags, @ack_bit) do
+  def deserialize(flags, 0, <<>>) when is_set(flags, @ack_bit) do
     {:ok, %__MODULE__{ack: true}}
   end
 
-  def deserialize(flags, 0, _payload) when set?(flags, @ack_bit) do
+  def deserialize(flags, 0, _payload) when is_set(flags, @ack_bit) do
     {:error,
      {:connection, Errors.frame_size_error(),
       "SETTINGS ack frame with non-empty payload (RFC9113§6.5)"}}

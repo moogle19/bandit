@@ -44,13 +44,13 @@ defmodule Bandit.HTTP2.Frame.Headers do
         <<padding_length::8, exclusive_dependency::1, stream_dependency::31, weight::8,
           rest::binary>>
       )
-      when set?(flags, @padding_bit) and set?(flags, @priority_bit) and
+      when is_set(flags, @padding_bit) and is_set(flags, @priority_bit) and
              byte_size(rest) >= padding_length do
     {:ok,
      %__MODULE__{
        stream_id: stream_id,
-       end_stream: set?(flags, @end_stream_bit),
-       end_headers: set?(flags, @end_headers_bit),
+       end_stream: is_set(flags, @end_stream_bit),
+       end_headers: is_set(flags, @end_headers_bit),
        exclusive_dependency: exclusive_dependency == 0x01,
        stream_dependency: stream_dependency,
        weight: weight,
@@ -60,20 +60,20 @@ defmodule Bandit.HTTP2.Frame.Headers do
 
   # Padding but not priority
   def deserialize(flags, stream_id, <<padding_length::8, rest::binary>>)
-      when set?(flags, @padding_bit) and clear?(flags, @priority_bit) and
+      when is_set(flags, @padding_bit) and is_clear(flags, @priority_bit) and
              byte_size(rest) >= padding_length do
     {:ok,
      %__MODULE__{
        stream_id: stream_id,
-       end_stream: set?(flags, @end_stream_bit),
-       end_headers: set?(flags, @end_headers_bit),
+       end_stream: is_set(flags, @end_stream_bit),
+       end_headers: is_set(flags, @end_headers_bit),
        fragment: binary_part(rest, 0, byte_size(rest) - padding_length)
      }}
   end
 
   # Any other case where padding is set
   def deserialize(flags, _stream_id, <<_padding_length::8, _rest::binary>>)
-      when set?(flags, @padding_bit) do
+      when is_set(flags, @padding_bit) do
     {:error,
      {:connection, Errors.protocol_error(),
       "HEADERS frame with invalid padding length (RFC9113§6.2)"}}
@@ -84,12 +84,12 @@ defmodule Bandit.HTTP2.Frame.Headers do
         stream_id,
         <<exclusive_dependency::1, stream_dependency::31, weight::8, fragment::binary>>
       )
-      when set?(flags, @priority_bit) do
+      when is_set(flags, @priority_bit) do
     {:ok,
      %__MODULE__{
        stream_id: stream_id,
-       end_stream: set?(flags, @end_stream_bit),
-       end_headers: set?(flags, @end_headers_bit),
+       end_stream: is_set(flags, @end_stream_bit),
+       end_headers: is_set(flags, @end_headers_bit),
        exclusive_dependency: exclusive_dependency == 0x01,
        stream_dependency: stream_dependency,
        weight: weight,
@@ -98,12 +98,12 @@ defmodule Bandit.HTTP2.Frame.Headers do
   end
 
   def deserialize(flags, stream_id, <<fragment::binary>>)
-      when clear?(flags, @priority_bit) and clear?(flags, @padding_bit) do
+      when is_clear(flags, @priority_bit) and is_clear(flags, @padding_bit) do
     {:ok,
      %__MODULE__{
        stream_id: stream_id,
-       end_stream: set?(flags, @end_stream_bit),
-       end_headers: set?(flags, @end_headers_bit),
+       end_stream: is_set(flags, @end_stream_bit),
+       end_headers: is_set(flags, @end_headers_bit),
        fragment: fragment
      }}
   end

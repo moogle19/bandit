@@ -30,7 +30,7 @@ defmodule Bandit.HTTP2.Frame.Continuation do
     {:ok,
      %__MODULE__{
        stream_id: stream_id,
-       end_headers: set?(flags, @end_headers_bit),
+       end_headers: is_set(flags, @end_headers_bit),
        fragment: fragment
      }}
   end

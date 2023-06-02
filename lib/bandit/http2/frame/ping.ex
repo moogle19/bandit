@@ -17,11 +17,11 @@ defmodule Bandit.HTTP2.Frame.Ping do
 
   @spec deserialize(Frame.flags(), Stream.stream_id(), iodata()) ::
           {:ok, t()} | {:error, Connection.error()}
-  def deserialize(flags, 0, <<payload::binary-size(8)>>) when set?(flags, @ack_bit) do
+  def deserialize(flags, 0, <<payload::binary-size(8)>>) when is_set(flags, @ack_bit) do
     {:ok, %__MODULE__{ack: true, payload: payload}}
   end
 
-  def deserialize(flags, 0, <<payload::binary-size(8)>>) when clear?(flags, @ack_bit) do
+  def deserialize(flags, 0, <<payload::binary-size(8)>>) when is_clear(flags, @ack_bit) do
     {:ok, %__MODULE__{ack: false, payload: payload}}
   end
 
