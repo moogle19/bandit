@@ -20,7 +20,7 @@ defmodule Bandit.WebSocket.Frame do
   @spec deserialize(binary(), non_neg_integer()) ::
           {{:ok, frame()}, iodata()} | {{:error, term()}, iodata()}
   def deserialize(
-        <<fin::1, compressed::1, rsv::2, opcode::4, 1::1, 127::7, length::64, mask::32,
+        <<fin::1, compressed::1, rsv::2, opcode::4, 1::1, 126::7, length::16, mask::32,
           payload::binary-size(length), rest::binary>>,
         max_frame_size
       )
@@ -29,7 +29,7 @@ defmodule Bandit.WebSocket.Frame do
   end
 
   def deserialize(
-        <<fin::1, compressed::1, rsv::2, opcode::4, 1::1, 126::7, length::16, mask::32,
+        <<fin::1, compressed::1, rsv::2, opcode::4, 1::1, 127::7, length::64, mask::32,
           payload::binary-size(length), rest::binary>>,
         max_frame_size
       )
