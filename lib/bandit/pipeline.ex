@@ -49,12 +49,14 @@ defmodule Bandit.Pipeline do
 
   @spec determine_scheme(transport_info(), request_target()) ::
           {:ok, String.t()} | {:error, String.t()}
-  defp determine_scheme({secure?, _, _, _}, {scheme, _, _, _}) do
-    case {scheme, secure?} do
-      {nil, true} -> {:ok, "https"}
-      {"https", true} -> {:ok, "https"}
-      {nil, false} -> {:ok, "http"}
-      {"http", false} -> {:ok, "http"}
+  # Use scheme from HTTP headers when available and valid
+  defp determine_scheme(_, {scheme, _, _, _}) when scheme in ["http", "https"], do: {:ok, scheme}
+
+  # Otherwise determine scheme based on the underlying transport mode
+  defp determine_scheme({secure?, _, _, _}, _) do
+    case secure? do
+      true -> {:ok, "https"}
+      false -> {:ok, "http"}
       _ -> {:error, "request target scheme does not agree with transport"}
     end
   end
