@@ -64,7 +64,9 @@ defmodule Bandit.Pipeline do
           Plug.Conn.headers()
         ) ::
           {:ok, Plug.Conn.host(), Plug.Conn.port_number()} | {:error, String.t()}
-  defp determine_host_and_port({_, {_ip, local_port}, _, _}, version, {_, nil, nil, _}, headers) do
+  defp determine_host_and_port({_, peer_info, _, _}, version, {_, nil, nil, _}, headers) do
+    local_port = get_local_port(peer_info)
+
     with host_header when is_binary(host_header) <- Bandit.Headers.get_header(headers, "host"),
          {:ok, host, port} <- Bandit.Headers.parse_hostlike_header(host_header) do
       {:ok, host, port || local_port}
@@ -81,12 +83,15 @@ defmodule Bandit.Pipeline do
   end
 
   defp determine_host_and_port(
-         {_, {_ip, local_port}, _, _},
+         {_, peer_info, _, _},
          _version,
          {_, host, port, _},
          _headers
        ),
-       do: {:ok, to_string(host), port || local_port}
+       do: {:ok, to_string(host), port || get_local_port(peer_info)}
+
+  defp get_local_port({type, _}) when type in [:local, :unspec, :undefined], do: 80
+  defp get_local_port({_ip, port}), do: port
 
   @spec determine_path_and_query(request_target()) :: {String.t(), nil | String.t()}
   defp determine_path_and_query({_, _, _, :*}), do: {"*", nil}
