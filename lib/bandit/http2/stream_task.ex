@@ -83,8 +83,8 @@ defmodule Bandit.HTTP2.StreamTask do
 
   defp get_host_and_port(headers) do
     case Bandit.Headers.get_header(headers, ":authority") do
-      authority when not is_nil(authority) -> Bandit.Headers.parse_hostlike_header(authority)
       nil -> {:ok, nil, nil}
+      authority -> Bandit.Headers.parse_hostlike_header(authority)
     end
   end
 
