@@ -30,4 +30,8 @@ defmodule Bandit.Compression do
 
   def compress(response, "x-gzip", _opts), do: compress(response, "gzip", [])
   def compress(response, "gzip", _opts), do: :zlib.gzip(response)
+
+  if Code.ensure_loaded?(:brotli) do
+    def compress(response, "br", _opts), do: :brotli.encode(response)
+  end
 end

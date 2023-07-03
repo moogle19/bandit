@@ -34,6 +34,8 @@ defmodule Bandit.MixProject do
       {:websock, "~> 0.5"},
       {:hpax, "~> 0.1.1"},
       {:telemetry, "~> 0.4 or ~> 1.0"},
+      #{:brotli, "~> 0.3.1", optional: true},
+      {:brotli, github: "yjh0502/erl-brotli", override: true, optional: true},
       {:req, "~> 0.3", only: [:dev, :test]},
       {:machete, ">= 0.0.0", only: [:dev, :test]},
       {:ex_doc, "~> 0.24", only: [:dev, :test], runtime: false},
