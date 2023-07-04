@@ -2,6 +2,10 @@ defmodule Bandit.Headers do
   @moduledoc false
   # Conveniences for dealing with headers.
 
+  @spec is_pseudo_header({binary(), binary()}) :: Macro.t()
+  defguard is_pseudo_header(header)
+           when is_tuple(header) and binary_part(elem(header, 0), 0, 1) == ":"
+
   @spec is_port_number(integer()) :: Macro.t()
   defguardp is_port_number(port) when Bitwise.band(port, 0xFFFF) === port
 

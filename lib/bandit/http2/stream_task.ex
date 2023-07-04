@@ -22,6 +22,8 @@ defmodule Bandit.HTTP2.StreamTask do
 
   use Task
 
+  require Bandit.Headers
+
   # A stream process can be created only once we have an adapter & set of headers. Pass them in
   # at creation time to ensure this invariant
   @spec start_link(
@@ -110,9 +112,9 @@ defmodule Bandit.HTTP2.StreamTask do
   # RFC9113§8.3 - pseudo headers must appear first
   defp split_headers(headers) do
     {pseudo_headers, headers} =
-      Enum.split_while(headers, fn {key, _value} -> String.starts_with?(key, ":") end)
+      Enum.split_while(headers, &Bandit.Headers.is_pseudo_header/1)
 
-    if Enum.any?(headers, fn {key, _value} -> String.starts_with?(key, ":") end),
+    if Enum.any?(headers, &Bandit.Headers.is_pseudo_header/1),
       do: {:error, "Received pseudo headers after regular one"},
       else: {:ok, pseudo_headers, headers}
   end

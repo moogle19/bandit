@@ -8,6 +8,7 @@ defmodule Bandit.HTTP2.Stream do
   # wire is a connection concern as it must be serialized properly & is subject to
   # flow control at a connection level
 
+  require Bandit.Headers
   require Integer
   require Logger
 
@@ -142,7 +143,7 @@ defmodule Bandit.HTTP2.Stream do
 
   # RFC9113§8.1 - no pseudo headers
   defp no_pseudo_headers(headers, stream_id) do
-    if Enum.any?(headers, fn {key, _value} -> String.starts_with?(key, ":") end) do
+    if Enum.any?(headers, &Bandit.Headers.is_pseudo_header/1) do
       {:error,
        {:stream, stream_id, Errors.protocol_error(), "Received trailers with pseudo headers"}}
     else
