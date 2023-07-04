@@ -69,7 +69,7 @@ defmodule Bandit.Headers do
       value ->
         header_keys =
           value
-          |> String.downcase()
+          |> String.downcase(:ascii)
           |> Plug.Conn.Utils.list()
 
         {:ok, header_keys}
