@@ -4,6 +4,8 @@ defmodule Bandit.WebSocket.Connection do
 
   alias Bandit.WebSocket.{Frame, PerMessageDeflate, Socket}
 
+  import Bandit.WebSocket.Frame
+
   defstruct websock: nil,
             websock_state: nil,
             state: :open,
@@ -55,31 +57,31 @@ defmodule Bandit.WebSocket.Connection do
     connection = do_recv_metrics(frame, connection)
 
     case frame do
-      %Frame.Continuation{} ->
+      continuation_frame() ->
         do_error(1002, "Received unexpected continuation frame (RFC6455§5.4)", socket, connection)
 
-      %Frame.Text{fin: true, compressed: true} = frame ->
+      text_frame(fin: true, compressed: true) = frame ->
         do_inflate(frame, socket, connection)
 
-      %Frame.Text{fin: true} = frame ->
-        if !Keyword.get(connection.opts, :validate_text_frames, true) || String.valid?(frame.data) do
-          connection.websock.handle_in({frame.data, opcode: :text}, connection.websock_state)
+      text_frame(fin: true, data: data) ->
+        if !Keyword.get(connection.opts, :validate_text_frames, true) || String.valid?(data) do
+          connection.websock.handle_in({data, opcode: :text}, connection.websock_state)
           |> handle_continutation(socket, connection)
         else
           do_error(1007, "Received non UTF-8 text frame (RFC6455§8.1)", socket, connection)
         end
 
-      %Frame.Text{fin: false} = frame ->
+      text_frame(fin: false) = frame ->
         {:continue, %{connection | fragment_frame: frame}}
 
-      %Frame.Binary{fin: true, compressed: true} = frame ->
+      binary_frame(fin: true, compressed: true) = frame ->
         do_inflate(frame, socket, connection)
 
-      %Frame.Binary{fin: true} = frame ->
-        connection.websock.handle_in({frame.data, opcode: :binary}, connection.websock_state)
+      binary_frame(fin: true, data: data) ->
+        connection.websock.handle_in({data, opcode: :binary}, connection.websock_state)
         |> handle_continutation(socket, connection)
 
-      %Frame.Binary{fin: false} = frame ->
+      binary_frame(fin: false) = frame ->
         {:continue, %{connection | fragment_frame: frame}}
 
       frame ->
@@ -87,25 +89,59 @@ defmodule Bandit.WebSocket.Connection do
     end
   end
 
-  def handle_frame(frame, socket, %{fragment_frame: fragment_frame} = connection)
+  def handle_frame(
+        frame,
+        socket,
+        %{fragment_frame: text_frame(data: fragment_data) = fragment_frame} = connection
+      )
       when not is_nil(fragment_frame) do
     connection = do_recv_metrics(frame, connection)
 
     case frame do
-      %Frame.Continuation{fin: true} = frame ->
-        data = IO.iodata_to_binary([connection.fragment_frame.data | frame.data])
-        frame = %{connection.fragment_frame | fin: true, data: data}
+      continuation_frame(fin: true, data: data) ->
+        data = IO.iodata_to_binary([fragment_data | data])
+        frame = text_frame(fragment_frame, fin: true, data: data)
         handle_frame(frame, socket, %{connection | fragment_frame: nil})
 
-      %Frame.Continuation{fin: false} = frame ->
-        data = [connection.fragment_frame.data | frame.data]
-        frame = %{connection.fragment_frame | fin: true, data: data}
+      continuation_frame(fin: false, data: data) ->
+        data = [fragment_data | data]
+        frame = text_frame(fragment_frame, fin: true, data: data)
         {:continue, %{connection | fragment_frame: frame}}
 
-      %Frame.Text{} ->
+      text_frame() ->
         do_error(1002, "Received unexpected text frame (RFC6455§5.4)", socket, connection)
 
-      %Frame.Binary{} ->
+      binary_frame() ->
+        do_error(1002, "Received unexpected binary frame (RFC6455§5.4)", socket, connection)
+
+      frame ->
+        handle_control_frame(frame, socket, connection)
+    end
+  end
+
+  def handle_frame(
+        frame,
+        socket,
+        %{fragment_frame: binary_frame(data: fragment_data) = fragment_frame} = connection
+      )
+      when not is_nil(fragment_frame) do
+    connection = do_recv_metrics(frame, connection)
+
+    case frame do
+      continuation_frame(fin: true, data: data) ->
+        data = IO.iodata_to_binary([fragment_data | data])
+        frame = binary_frame(fragment_frame, fin: true, data: data)
+        handle_frame(frame, socket, %{connection | fragment_frame: nil})
+
+      continuation_frame(fin: false, data: data) ->
+        data = [fragment_data | data]
+        frame = binary_frame(fragment_frame, fin: true, data: data)
+        {:continue, %{connection | fragment_frame: frame}}
+
+      text_frame() ->
+        do_error(1002, "Received unexpected text frame (RFC6455§5.4)", socket, connection)
+
+      binary_frame() ->
         do_error(1002, "Received unexpected binary frame (RFC6455§5.4)", socket, connection)
 
       frame ->
@@ -115,10 +151,10 @@ defmodule Bandit.WebSocket.Connection do
 
   defp handle_control_frame(frame, socket, connection) do
     case frame do
-      %Frame.ConnectionClose{} = frame ->
+      close_frame(code: code) ->
         # This is a bit of a subtle case, see RFC6455§7.4.1-2
         reply_code =
-          case frame.code do
+          case code do
             code when code in 1000..1003 or code in 1007..1011 or code > 2999 -> 1000
             _code -> 1002
           end
@@ -126,21 +162,21 @@ defmodule Bandit.WebSocket.Connection do
         _ = do_stop(reply_code, :remote, socket, connection)
         {:close, %{connection | state: :closing}}
 
-      %Frame.Ping{} = frame ->
+      ping_frame(data: data) ->
         connection =
-          Socket.send_frame(socket, {:pong, frame.data}, false)
+          Socket.send_frame(socket, {:pong, data}, false)
           |> do_send_metrics(connection)
 
         if function_exported?(connection.websock, :handle_control, 2) do
-          connection.websock.handle_control({frame.data, opcode: :ping}, connection.websock_state)
+          connection.websock.handle_control({data, opcode: :ping}, connection.websock_state)
           |> handle_continutation(socket, connection)
         else
           {:continue, connection}
         end
 
-      %Frame.Pong{} = frame ->
+      pong_frame(data: data) ->
         if function_exported?(connection.websock, :handle_control, 2) do
-          connection.websock.handle_control({frame.data, opcode: :pong}, connection.websock_state)
+          connection.websock.handle_control({data, opcode: :pong}, connection.websock_state)
           |> handle_continutation(socket, connection)
         else
           {:continue, connection}
@@ -281,10 +317,25 @@ defmodule Bandit.WebSocket.Connection do
     {:continue, connection}
   end
 
-  defp do_inflate(frame, socket, connection) do
-    case PerMessageDeflate.inflate(frame.data, connection.compress) do
+  defp do_inflate(text_frame(data: data) = frame, socket, connection) do
+    case PerMessageDeflate.inflate(data, connection.compress) do
       {:ok, data, compress} ->
-        frame = %{frame | data: data, compressed: false}
+        frame = text_frame(frame, data: data, compressed: false)
+        connection = %{connection | compress: compress}
+        handle_frame(frame, socket, connection)
+
+      {:error, :no_compress} ->
+        do_error(1002, "Received unexpected compressed frame (RFC6455§5.2)", socket, connection)
+
+      {:error, _reason} ->
+        do_error(1007, "Inflation error", socket, connection)
+    end
+  end
+
+  defp do_inflate(binary_frame(data: data) = frame, socket, connection) do
+    case PerMessageDeflate.inflate(data, connection.compress) do
+      {:ok, data, compress} ->
+        frame = binary_frame(frame, data: data, compressed: false)
         connection = %{connection | compress: compress}
         handle_frame(frame, socket, connection)
 
