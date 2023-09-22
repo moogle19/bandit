@@ -133,11 +133,15 @@ defmodule Bandit.HTTP2.Connection do
     {:continue, connection}
   end
 
-  def handle_frame(%Frame.Settings{ack: false, settings: %{} = settings}, socket, connection) do
+  def handle_frame(
+        %Frame.Settings{ack: false, settings: %Bandit.HTTP2.Settings{} = settings},
+        socket,
+        %__MODULE__{streams: streams} = connection
+      ) do
     _ = %Frame.Settings{ack: true} |> send_frame(socket, connection)
 
     streams =
-      connection.streams
+      streams
       |> StreamCollection.update_initial_send_window_size(settings.initial_window_size)
       |> StreamCollection.update_max_concurrent_streams(settings.max_concurrent_streams)
 

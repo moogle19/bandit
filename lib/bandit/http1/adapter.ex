@@ -43,7 +43,7 @@ defmodule Bandit.HTTP1.Adapter do
   # Header Reading
   ################
 
-  def read_request_line(%{buffer: buffer} = req, method \\ nil, request_target \\ nil) do
+  def read_request_line(%__MODULE__{buffer: buffer} = req, method \\ nil, request_target \\ nil) do
     packet_size = Keyword.get(req.opts.http_1, :max_request_line_length, 10_000)
 
     case :erlang.decode_packet(:http_bin, buffer, packet_size: packet_size) do
@@ -72,7 +72,7 @@ defmodule Bandit.HTTP1.Adapter do
     end
   end
 
-  def read_headers(%{} = req) do
+  def read_headers(%__MODULE__{} = req) do
     with {:ok, headers, %__MODULE__{} = req} <- do_read_headers(req),
          {:ok, body_size} <- Bandit.Headers.get_content_length(headers) do
       body_encoding = Bandit.Headers.get_header(headers, "transfer-encoding")
@@ -106,7 +106,7 @@ defmodule Bandit.HTTP1.Adapter do
     end
   end
 
-  defp do_read_headers(%{buffer: buffer} = req, headers \\ []) do
+  defp do_read_headers(%__MODULE__{buffer: buffer} = req, headers \\ []) do
     packet_size = Keyword.get(req.opts.http_1, :max_header_length, 10_000)
 
     case :erlang.decode_packet(:httph_bin, buffer, packet_size: packet_size) do
