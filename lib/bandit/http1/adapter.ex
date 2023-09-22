@@ -43,19 +43,19 @@ defmodule Bandit.HTTP1.Adapter do
   # Header Reading
   ################
 
-  def read_request_line(req, method \\ nil, request_target \\ nil) do
+  def read_request_line(%{buffer: buffer} = req, method \\ nil, request_target \\ nil) do
     packet_size = Keyword.get(req.opts.http_1, :max_request_line_length, 10_000)
 
-    case :erlang.decode_packet(:http_bin, req.buffer, packet_size: packet_size) do
+    case :erlang.decode_packet(:http_bin, buffer, packet_size: packet_size) do
       {:more, _len} ->
         with {:ok, chunk} <- read_available(req.socket, _read_timeout = nil) do
-          read_request_line(%{req | buffer: req.buffer <> chunk}, method, request_target)
+          read_request_line(%{req | buffer: buffer <> chunk}, method, request_target)
         end
 
       {:ok, {:http_request, method, request_target, version}, rest} ->
         with {:ok, version} <- get_version(version),
              {:ok, request_target} <- resolve_request_target(request_target) do
-          bytes_read = byte_size(req.buffer) - byte_size(rest)
+          bytes_read = byte_size(buffer) - byte_size(rest)
           metrics = Map.update(req.metrics, :req_line_bytes, bytes_read, &(&1 + bytes_read))
           req = %{req | buffer: rest, version: version, metrics: metrics}
           {:ok, to_string(method), request_target, req}
@@ -72,7 +72,7 @@ defmodule Bandit.HTTP1.Adapter do
     end
   end
 
-  def read_headers(req) do
+  def read_headers(%{} = req) do
     with {:ok, headers, %__MODULE__{} = req} <- do_read_headers(req),
          {:ok, body_size} <- Bandit.Headers.get_content_length(headers) do
       body_encoding = Bandit.Headers.get_header(headers, "transfer-encoding")
@@ -106,18 +106,18 @@ defmodule Bandit.HTTP1.Adapter do
     end
   end
 
-  defp do_read_headers(req, headers \\ []) do
+  defp do_read_headers(%{buffer: buffer} = req, headers \\ []) do
     packet_size = Keyword.get(req.opts.http_1, :max_header_length, 10_000)
 
-    case :erlang.decode_packet(:httph_bin, req.buffer, packet_size: packet_size) do
+    case :erlang.decode_packet(:httph_bin, buffer, packet_size: packet_size) do
       {:more, _len} ->
         with {:ok, chunk} <- read_available(req.socket, _read_timeout = nil) do
-          req = %{req | buffer: req.buffer <> chunk}
+          req = %{req | buffer: buffer <> chunk}
           do_read_headers(req, headers)
         end
 
       {:ok, {:http_header, _, header, _, value}, rest} ->
-        bytes_read = byte_size(req.buffer) - byte_size(rest)
+        bytes_read = byte_size(buffer) - byte_size(rest)
         metrics = Map.update(req.metrics, :req_header_bytes, bytes_read, &(&1 + bytes_read))
         req = %{req | buffer: rest, metrics: metrics}
         headers = [{header |> to_string() |> String.downcase(:ascii), value} | headers]
@@ -129,7 +129,7 @@ defmodule Bandit.HTTP1.Adapter do
         end
 
       {:ok, :http_eoh, rest} ->
-        bytes_read = byte_size(req.buffer) - byte_size(rest)
+        bytes_read = byte_size(buffer) - byte_size(rest)
 
         metrics =
           req.metrics

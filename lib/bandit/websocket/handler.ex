@@ -7,7 +7,7 @@ defmodule Bandit.WebSocket.Handler do
   alias Bandit.WebSocket.{Connection, Frame}
 
   @impl ThousandIsland.Handler
-  def handle_connection(socket, state) do
+  def handle_connection(socket, %{} = state) do
     {websock, websock_opts, connection_opts} = state.upgrade_opts
 
     connection_opts
@@ -42,8 +42,8 @@ defmodule Bandit.WebSocket.Handler do
   end
 
   @impl ThousandIsland.Handler
-  def handle_data(data, socket, state) do
-    (state.buffer <> data)
+  def handle_data(data, socket, %{buffer: buffer} = state) do
+    (buffer <> data)
     |> Stream.unfold(
       &Frame.deserialize(&1, Keyword.get(state.connection.opts, :max_frame_size, 0))
     )
@@ -75,22 +75,24 @@ defmodule Bandit.WebSocket.Handler do
   def handle_close(_socket, _state), do: :ok
 
   @impl ThousandIsland.Handler
-  def handle_shutdown(socket, state), do: Connection.handle_shutdown(socket, state.connection)
+  def handle_shutdown(socket, %{connection: connection}),
+    do: Connection.handle_shutdown(socket, connection)
 
   @impl ThousandIsland.Handler
-  def handle_error(reason, socket, state),
-    do: Connection.handle_error(reason, socket, state.connection)
+  def handle_error(reason, socket, %{connection: connection}),
+    do: Connection.handle_error(reason, socket, connection)
 
   @impl ThousandIsland.Handler
-  def handle_timeout(socket, state), do: Connection.handle_timeout(socket, state.connection)
+  def handle_timeout(socket, %{connection: connection}),
+    do: Connection.handle_timeout(socket, connection)
 
-  def handle_info({:plug_conn, :sent}, {socket, state}),
+  def handle_info({:plug_conn, :sent}, {%{} = socket, state}),
     do: {:noreply, {socket, state}, socket.read_timeout}
 
-  def handle_info({:EXIT, _pid, :normal}, {socket, state}),
+  def handle_info({:EXIT, _pid, :normal}, {%{} = socket, state}),
     do: {:noreply, {socket, state}, socket.read_timeout}
 
-  def handle_info(msg, {socket, state}) do
+  def handle_info(msg, {%{} = socket, %{} = state}) do
     case Connection.handle_info(msg, socket, state.connection) do
       {:continue, connection_state} ->
         {:noreply, {socket, %{state | connection: connection_state}}, socket.read_timeout}

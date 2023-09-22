@@ -54,9 +54,9 @@ defmodule Bandit.HTTP2.Adapter do
     do_read_req_body(adapter, timeout, length, [])
   end
 
-  defp do_read_req_body(adapter, timeout, remaining_length, acc) do
+  defp do_read_req_body(%{metrics: metrics} = adapter, timeout, remaining_length, acc) do
     metrics =
-      adapter.metrics
+      metrics
       |> Map.put_new_lazy(:req_body_start_time, &Bandit.Telemetry.monotonic_time/0)
 
     adapter = %{adapter | metrics: metrics}
@@ -72,7 +72,7 @@ defmodule Bandit.HTTP2.Adapter do
           bytes_read = IO.iodata_length(acc)
 
           metrics =
-            adapter.metrics
+            metrics
             |> Map.update(:req_body_bytes, bytes_read, &(&1 + bytes_read))
 
           {:more, wrap_req_body(acc), %{adapter | metrics: metrics}}
@@ -82,7 +82,7 @@ defmodule Bandit.HTTP2.Adapter do
         bytes_read = IO.iodata_length(acc)
 
         metrics =
-          adapter.metrics
+          metrics
           |> Map.update(:req_body_bytes, bytes_read, &(&1 + bytes_read))
           |> Map.put(:req_body_end_time, Bandit.Telemetry.monotonic_time())
 
@@ -92,7 +92,7 @@ defmodule Bandit.HTTP2.Adapter do
         bytes_read = IO.iodata_length(acc)
 
         metrics =
-          adapter.metrics
+          metrics
           |> Map.update(:req_body_bytes, bytes_read, &(&1 + bytes_read))
 
         {:more, wrap_req_body(acc), %{adapter | metrics: metrics}}
@@ -133,8 +133,8 @@ defmodule Bandit.HTTP2.Adapter do
           }
 
           deflate_options = Keyword.get(adapter.opts, :deflate_options, [])
-          body = Bandit.Compression.compress(body, adapter.content_encoding, deflate_options)
-          headers = [{"content-encoding", adapter.content_encoding} | headers]
+          body = Bandit.Compression.compress(body, content_encoding, deflate_options)
+          headers = [{"content-encoding", content_encoding} | headers]
           {body, headers, metrics}
 
         _ ->
@@ -222,7 +222,7 @@ defmodule Bandit.HTTP2.Adapter do
   end
 
   @impl Plug.Conn.Adapter
-  def inform(adapter, status, headers) do
+  def inform(%__MODULE__{} = adapter, status, headers) do
     headers = split_cookies(headers)
     headers = [{":status", to_string(status)} | headers]
 
@@ -242,7 +242,7 @@ defmodule Bandit.HTTP2.Adapter do
   @impl Plug.Conn.Adapter
   def get_http_protocol(%__MODULE__{}), do: :"HTTP/2"
 
-  defp send_headers(adapter, status, headers, end_stream) do
+  defp send_headers(%__MODULE__{} = adapter, status, headers, end_stream) do
     metrics =
       adapter.metrics
       |> Map.put_new_lazy(:resp_start_time, &Bandit.Telemetry.monotonic_time/0)
@@ -264,7 +264,7 @@ defmodule Bandit.HTTP2.Adapter do
     %{adapter | metrics: metrics}
   end
 
-  defp send_data(adapter, data, end_stream) do
+  defp send_data(%__MODULE__{} = adapter, data, end_stream) do
     GenServer.call(
       adapter.connection,
       {:send_data, adapter.stream_id, data, end_stream},

@@ -50,7 +50,7 @@ defmodule Bandit.HTTP2.StreamTask do
   @spec recv_rst_stream(pid(), Bandit.HTTP2.Errors.error_code()) :: true
   def recv_rst_stream(pid, error_code), do: Process.exit(pid, {:recv_rst_stream, error_code})
 
-  def run(req, transport_info, all_headers, plug, span) do
+  def run(%{} = req, transport_info, all_headers, plug, span) do
     with {:ok, request_target} <- build_request_target(all_headers),
          method <- Bandit.Headers.get_header(all_headers, ":method") do
       with {:ok, pseudo_headers, headers} <- split_headers(all_headers),

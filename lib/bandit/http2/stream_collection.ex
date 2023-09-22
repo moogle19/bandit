@@ -32,7 +32,7 @@ defmodule Bandit.HTTP2.StreamCollection do
   end
 
   @spec update_initial_send_window_size(t(), non_neg_integer()) :: t()
-  def update_initial_send_window_size(collection, initial_send_window_size) do
+  def update_initial_send_window_size(%__MODULE__{} = collection, initial_send_window_size) do
     delta = initial_send_window_size - collection.initial_send_window_size
 
     streams =
@@ -50,8 +50,8 @@ defmodule Bandit.HTTP2.StreamCollection do
   end
 
   @spec get_stream(t(), Stream.stream_id()) :: {:ok, Stream.t()}
-  def get_stream(collection, stream_id) do
-    case Map.get(collection.streams, stream_id) do
+  def get_stream(%__MODULE__{streams: streams} = collection, stream_id) do
+    case Map.get(streams, stream_id) do
       %Stream{} = stream ->
         {:ok, stream}
 
@@ -75,33 +75,34 @@ defmodule Bandit.HTTP2.StreamCollection do
   end
 
   @spec get_active_stream_by_pid(t(), pid()) :: {:ok, Stream.t()} | {:error, :no_stream}
-  def get_active_stream_by_pid(collection, pid) do
-    case Enum.find(collection.streams, fn {_stream_id, stream} -> stream.pid == pid end) do
+  def get_active_stream_by_pid(%__MODULE__{streams: streams}, pid) do
+    case Enum.find(streams, fn {_stream_id, stream} -> stream.pid == pid end) do
       {_, %Stream{} = stream} -> {:ok, stream}
       nil -> {:error, :no_stream}
     end
   end
 
   @spec put_stream(t(), Stream.t()) :: {:ok, t()} | {:error, :invalid_stream}
-  def put_stream(collection, %Stream{state: state} = stream) when state in [:idle, :closed] do
+  def put_stream(%__MODULE__{} = collection, %Stream{state: state} = stream)
+      when state in [:idle, :closed] do
     case stream.pid do
       nil -> {:ok, %{collection | streams: Map.delete(collection.streams, stream.stream_id)}}
       _pid -> {:error, :invalid_stream}
     end
   end
 
-  def put_stream(collection, %Stream{} = stream) do
+  def put_stream(%__MODULE__{streams: streams} = collection, %Stream{} = stream) do
     case stream.pid do
       nil ->
         {:error, :invalid_stream}
 
       _pid ->
         new_stream_count =
-          if Map.has_key?(collection.streams, stream.stream_id),
+          if Map.has_key?(streams, stream.stream_id),
             do: collection.stream_count,
             else: collection.stream_count + 1
 
-        streams = Map.put(collection.streams, stream.stream_id, stream)
+        streams = Map.put(streams, stream.stream_id, stream)
 
         last_local_stream_id =
           if Integer.is_even(stream.stream_id) do
@@ -130,11 +131,11 @@ defmodule Bandit.HTTP2.StreamCollection do
 
   @dialyzer {:nowarn_function, next_local_stream_id: 1}
   @spec next_local_stream_id(t()) :: Stream.stream_id()
-  def next_local_stream_id(collection), do: collection.last_local_stream_id + 2
+  def next_local_stream_id(%__MODULE__{last_local_stream_id: id}), do: id + 2
 
   @spec last_remote_stream_id(t()) :: Stream.stream_id()
-  def last_remote_stream_id(collection), do: collection.last_remote_stream_id
+  def last_remote_stream_id(%__MODULE__{last_remote_stream_id: id}), do: id
 
   @spec stream_count(t()) :: non_neg_integer()
-  def stream_count(collection), do: collection.stream_count
+  def stream_count(%__MODULE__{stream_count: stream_count}), do: stream_count
 end

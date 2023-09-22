@@ -5,7 +5,7 @@ defmodule Bandit.HTTP1.Handler do
   use ThousandIsland.Handler
 
   @impl ThousandIsland.Handler
-  def handle_data(data, socket, state) do
+  def handle_data(data, socket, %{} = state) do
     connection_span = ThousandIsland.Socket.telemetry_span(socket)
 
     span =
@@ -114,7 +114,7 @@ defmodule Bandit.HTTP1.Handler do
     _ -> :ok
   end
 
-  defp maybe_keepalive(req, state) do
+  defp maybe_keepalive(req, %{} = state) do
     requests_processed = Map.get(state, :requests_processed, 0) + 1
     request_limit = Keyword.get(state.opts.http_1, :max_requests, 0)
     under_limit = request_limit == 0 || requests_processed < request_limit
