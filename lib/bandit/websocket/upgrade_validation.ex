@@ -30,8 +30,8 @@ defmodule Bandit.WebSocket.UpgradeValidation do
     end
   end
 
-  defp assert_method(conn, verb) do
-    case conn.method do
+  defp assert_method(%Plug.Conn{method: method}, verb) do
+    case method do
       ^verb -> :ok
       other -> {:error, "HTTP method #{other} unsupported"}
     end
