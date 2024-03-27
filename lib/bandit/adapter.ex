@@ -272,6 +272,7 @@ defmodule Bandit.Adapter do
   def get_http_protocol(%__MODULE__{} = adapter),
     do: Bandit.HTTPTransport.version(adapter.transport)
 
+  @compile {:inline, validate_calling_process!: 1}
   defp validate_calling_process!(%{owner_pid: owner}) when owner == self(), do: :ok
   defp validate_calling_process!(_), do: raise("Adapter functions must be called by stream owner")
 end
