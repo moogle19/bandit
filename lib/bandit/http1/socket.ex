@@ -405,10 +405,11 @@ defmodule Bandit.HTTP1.Socket do
     defp safe_downcase(str), do: str
 
     defp encode_headers(headers) do
-      headers
-      |> Enum.map(fn {k, v} -> [k, ": ", v, "\r\n"] end)
-      |> then(&[&1 | ["\r\n"]])
+      [do_encode_headers(headers) | ["\r\n"]]
     end
+
+    defp do_encode_headers([]), do: []
+    defp do_encode_headers([{k, v} | rest]), do: [[k, ": ", v, "\r\n"] | do_encode_headers(rest)]
 
     def send_data(%@for{write_state: :writing} = socket, data, end_request) do
       send!(socket.socket, [socket.send_buffer | data])
