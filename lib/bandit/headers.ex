@@ -6,12 +6,9 @@ defmodule Bandit.Headers do
   defguardp is_port_number(port) when Bitwise.band(port, 0xFFFF) === port
 
   @spec get_header(Plug.Conn.headers(), header :: binary()) :: binary() | nil
-  def get_header(headers, header) do
-    case List.keyfind(headers, header, 0) do
-      {_, value} -> value
-      nil -> nil
-    end
-  end
+  def get_header([], _header), do: nil
+  def get_header([{header, value} | _rest], header), do: value
+  def get_header([_ | rest], header), do: get_header(rest, header)
 
   # Covers IPv6 addresses, like `[::1]:4000` as defined in RFC3986.
   @spec parse_hostlike_header!(host_header :: binary()) ::
