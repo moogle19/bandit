@@ -171,11 +171,14 @@ defmodule Bandit.HTTP2.Handler do
   end
 
   defp do_rescue_error(error, stacktrace, socket, state) do
+    error_code = Map.get(error, :error_code, Bandit.HTTP2.Errors.internal_error())
+    message = Map.get(error, :message, Exception.message(error))
+
     _ =
       if state[:connection] do
         Bandit.HTTP2.Connection.close_connection(
-          error.error_code,
-          error.message,
+          error_code,
+          message,
           socket,
           state[:connection]
         )

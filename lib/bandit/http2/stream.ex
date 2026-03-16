@@ -551,24 +551,28 @@ defmodule Bandit.HTTP2.Stream do
     def ensure_completed(%@for{state: :closed} = stream), do: stream
 
     def ensure_completed(%@for{state: :local_closed} = stream) do
-      receive do
-        {:bandit, {:headers, _headers, true}} ->
-          do_recv_end_stream(stream, true)
-
-        {:bandit, {:data, data, true}} ->
-          do_recv_data(stream, data, true) |> do_recv_end_stream(true)
-      after
-        # RFC9113§8.1 - hint the client to stop sending data
-        0 -> do_send(stream, {:send_rst_stream, Bandit.HTTP2.Errors.no_error()})
+      case do_recv(stream, 0) do
+        {:headers, _headers, stream} -> ensure_completed(stream)
+        {:data, _data, stream} -> ensure_completed(stream)
+        :timeout -> do_send(stream, {:send_rst_stream, Bandit.HTTP2.Errors.no_error()})
       end
     end
 
     def ensure_completed(%@for{state: state} = stream) do
-      stream_error!(
-        "Terminating stream in #{state} state",
-        stream,
-        Bandit.HTTP2.Errors.internal_error()
-      )
+      case do_recv(stream, 0) do
+        {:headers, _headers, stream} ->
+          ensure_completed(stream)
+
+        {:data, _data, stream} ->
+          ensure_completed(stream)
+
+        :timeout ->
+          stream_error!(
+            "Terminating stream in #{state} state",
+            stream,
+            Bandit.HTTP2.Errors.internal_error()
+          )
+      end
     end
 
     def supported_upgrade?(%@for{} = _stream, _protocol), do: false
