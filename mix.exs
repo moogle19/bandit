@@ -33,7 +33,6 @@ defmodule Bandit.MixProject do
   defp deps do
     [
       {:thousand_island, "~> 1.0"},
-      {:benchee, "~> 1.0", only: [:dev, :test]},
       {:plug, "~> 1.18"},
       {:websock, "~> 0.5"},
       {:hpax, "~> 1.0"},
