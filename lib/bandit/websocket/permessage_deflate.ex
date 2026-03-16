@@ -58,14 +58,16 @@ defmodule Bandit.WebSocket.PerMessageDeflate do
   end
 
   defp validate_params(params) do
-    no_invalid_params = params |> :proplists.split(@valid_params) |> elem(1) == []
-    no_repeat_params = params |> :proplists.get_keys() |> length() == length(params)
+    map = Map.new(params)
+
+    no_invalid_params = Enum.all?(params, fn {k, _v} -> k in @valid_params end)
+    no_repeat_params = map_size(map) == length(params)
 
     no_invalid_values =
-      :proplists.get_value("server_no_context_takeover", params) in [:undefined, true] &&
-        :proplists.get_value("client_no_context_takeover", params) in [:undefined, true] &&
-        :proplists.get_value("server_max_window_bits", params, 15) in 8..15 &&
-        :proplists.get_value("client_max_window_bits", params, 15) in 8..15
+      Map.get(map, "server_no_context_takeover", :undefined) in [:undefined, true] &&
+        Map.get(map, "client_no_context_takeover", :undefined) in [:undefined, true] &&
+        Map.get(map, "server_max_window_bits", 15) in 8..15 &&
+        Map.get(map, "client_max_window_bits", 15) in 8..15
 
     no_invalid_params && no_repeat_params && no_invalid_values
   end

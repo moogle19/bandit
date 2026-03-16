@@ -160,8 +160,7 @@ defmodule WebSocketProtocolTest do
               [
                 "sec-websocket-extensions: permessage-deflate",
                 "cache-control: max-age=0, private, must-revalidate"
-              ]} =
-               SimpleWebSocketClient.http1_handshake(client, EchoWebSock, [], true)
+              ]} = SimpleWebSocketClient.http1_handshake(client, EchoWebSock, [], true)
 
       deflated_payload = <<74, 76, 28, 5, 163, 96, 20, 12, 119, 0, 0>>
       SimpleWebSocketClient.send_text_frame(client, deflated_payload, 0xC)
