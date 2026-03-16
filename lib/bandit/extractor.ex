@@ -79,8 +79,7 @@ defmodule Bandit.Extractor do
         } = state
       ) do
     if payload_length >= required_length do
-      <<payload::binary-size(required_length), rest::binary>> =
-        IO.iodata_to_binary(state.payload)
+      <<payload::binary-size(required_length), rest::binary>> = IO.iodata_to_binary(state.payload)
 
       frame = state.frame_parser.deserialize(state.header <> payload, state.primitive_ops_module)
       state = transition_to_header_parsing(state, rest)

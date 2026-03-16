@@ -234,6 +234,10 @@ defmodule HTTP2PlugTest do
   end
 
   def no_body_read(conn) do
+    # Sleep to ensure the client's DATA frame arrives before we complete the Plug
+    # and exit, which would otherwise reliably race and send a RST_STREAM NO_ERROR
+    # before we observe the DATA frame
+    Process.sleep(10)
     conn |> send_resp(200, "")
   end
 
@@ -739,6 +743,10 @@ defmodule HTTP2PlugTest do
   end
 
   def no_read(conn) do
+    # Sleep to ensure the client's DATA frame arrives before we complete the Plug
+    # and exit, which would otherwise reliably race and send a RST_STREAM NO_ERROR
+    # before we observe the DATA frame
+    Process.sleep(10)
     conn |> send_resp(200, <<>>)
   end
 

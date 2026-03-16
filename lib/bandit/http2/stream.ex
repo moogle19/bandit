@@ -551,24 +551,50 @@ defmodule Bandit.HTTP2.Stream do
     def ensure_completed(%@for{state: :closed} = stream), do: stream
 
     def ensure_completed(%@for{state: :local_closed} = stream) do
-      receive do
-        {:bandit, {:headers, _headers, true}} ->
-          do_recv_end_stream(stream, true)
+      stream = drain_for_completion(stream)
 
-        {:bandit, {:data, data, true}} ->
-          do_recv_data(stream, data, true) |> do_recv_end_stream(true)
-      after
+      if stream.state == :local_closed do
         # RFC9113§8.1 - hint the client to stop sending data
-        0 -> do_send(stream, {:send_rst_stream, Bandit.HTTP2.Errors.no_error()})
+        do_send(stream, {:send_rst_stream, Bandit.HTTP2.Errors.no_error()})
+      end
+
+      stream
+    end
+
+    def ensure_completed(%@for{} = stream) do
+      stream = drain_for_completion(stream)
+
+      if stream.state != :closed do
+        stream_error!(
+          "Terminating stream in #{stream.state} state",
+          stream,
+          Bandit.HTTP2.Errors.internal_error()
+        )
+      else
+        stream
       end
     end
 
-    def ensure_completed(%@for{state: state} = stream) do
-      stream_error!(
-        "Terminating stream in #{state} state",
-        stream,
-        Bandit.HTTP2.Errors.internal_error()
-      )
+    defp drain_for_completion(stream) do
+      receive do
+        {:bandit, {:headers, _headers, end_stream}} ->
+          stream |> do_recv_end_stream(end_stream) |> drain_for_completion()
+
+        {:bandit, {:data, data, end_stream}} ->
+          # Process the data to ensure stream bounds checks are done,
+          # but we do NOT send window updates because we are terminating
+          # the stream without reading the data.
+          stream = do_recv_data(stream, data, true) |> do_recv_end_stream(end_stream)
+          drain_for_completion(stream)
+
+        {:bandit, {:send_window_update, delta}} ->
+          stream |> do_recv_send_window_update(delta) |> drain_for_completion()
+
+        {:bandit, {:rst_stream, error_code}} ->
+          do_recv_rst_stream!(stream, error_code)
+      after
+        0 -> stream
+      end
     end
 
     def supported_upgrade?(%@for{} = _stream, _protocol), do: false

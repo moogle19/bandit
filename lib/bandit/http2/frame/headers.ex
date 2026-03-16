@@ -113,8 +113,7 @@ defmodule Bandit.HTTP2.Frame.Headers do
             exclusive_dependency: false,
             stream_dependency: nil,
             weight: nil
-          } =
-            frame,
+          } = frame,
           max_frame_size
         ) do
       flags = if frame.end_stream, do: [@end_stream_bit], else: []
