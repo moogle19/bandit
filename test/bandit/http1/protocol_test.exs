@@ -350,6 +350,21 @@ defmodule HTTP1ProtocolTest do
       assert {:ok, "200 OK", _headers, "GET"} = SimpleHTTP1Client.recv_reply(client)
     end
 
+    test "tranfer-encoding is case insensitive", context do
+      client = SimpleHTTP1Client.tcp_client(context)
+
+      SimpleHTTP1Client.send(client, "POST", "/echo_method", [
+        "host: localhost",
+        "transfer-encoding: CHunKED"
+      ])
+
+      Transport.send(client, "6\r\nABCDEF\r\n0\r\n\r\n")
+      assert {:ok, "200 OK", _headers, "POST"} = SimpleHTTP1Client.recv_reply(client)
+
+      SimpleHTTP1Client.send(client, "GET", "/echo_method", ["host: banana"])
+      assert {:ok, "200 OK", _headers, "GET"} = SimpleHTTP1Client.recv_reply(client)
+    end
+
     def echo_method(conn) do
       send_resp(conn, 200, conn.method)
     end
