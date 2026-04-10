@@ -1036,7 +1036,6 @@ defmodule HTTP1ProtocolTest do
       assert response.body == "OK"
     end
 
-    @tag capture_log: true
     @tag timeout: 5_000
     @tag :timeouts
     test "trailers after final chunk cause hang — server must consume and ignore them",
@@ -1058,7 +1057,6 @@ defmodule HTTP1ProtocolTest do
       assert {:ok, "200 OK", _headers, "hello"} = SimpleHTTP1Client.recv_reply(client)
     end
 
-    @tag :capture_log
     @tag timeout: 5_000
     test "multiple trailers after final chunk cause hang", context do
       client = SimpleHTTP1Client.tcp_client(context)
@@ -1077,7 +1075,6 @@ defmodule HTTP1ProtocolTest do
       assert {:ok, "200 OK", _headers, "hello"} = SimpleHTTP1Client.recv_reply(client)
     end
 
-    @tag :capture_log
     test "no-trailer case works correctly (regression guard)", context do
       client = SimpleHTTP1Client.tcp_client(context)
 
