@@ -1036,6 +1036,70 @@ defmodule HTTP1ProtocolTest do
       assert response.body == "OK"
     end
 
+    @tag capture_log: true
+    @tag timeout: 5_000
+    @tag :timeouts
+    test "trailers after final chunk cause hang — server must consume and ignore them",
+         context do
+      client = SimpleHTTP1Client.tcp_client(context)
+
+      # POST with chunked body including trailers (valid per RFC 9112 §7.1)
+      SimpleHTTP1Client.send(client, "POST", "/echo_body", [
+        "host: localhost",
+        "transfer-encoding: chunked"
+      ])
+
+      # Chunked body: "hello" + final chunk "0\r\n" + trailer "X-Checksum: abc123\r\n" + "\r\n"
+      # The trailer causes the parser to enter the wrong branch and hang indefinitely.
+      Transport.send(client, "5\r\nhello\r\n0\r\nX-Checksum: abc123\r\n\r\n")
+
+      # This will time out because the server hangs in read_available!
+      # waiting for more data instead of consuming the trailers.
+      assert {:ok, "200 OK", _headers, "hello"} = SimpleHTTP1Client.recv_reply(client)
+    end
+
+    @tag :capture_log
+    @tag timeout: 5_000
+    test "multiple trailers after final chunk cause hang", context do
+      client = SimpleHTTP1Client.tcp_client(context)
+
+      SimpleHTTP1Client.send(client, "POST", "/echo_body", [
+        "host: localhost",
+        "transfer-encoding: chunked"
+      ])
+
+      # Multiple trailers — same hang behavior
+      Transport.send(
+        client,
+        "5\r\nhello\r\n0\r\nX-Checksum: abc\r\nX-Signature: def\r\n\r\n"
+      )
+
+      assert {:ok, "200 OK", _headers, "hello"} = SimpleHTTP1Client.recv_reply(client)
+    end
+
+    @tag :capture_log
+    test "no-trailer case works correctly (regression guard)", context do
+      client = SimpleHTTP1Client.tcp_client(context)
+
+      # This case works: "0\r\n\r\n" splits to ["0", "\r\n"], matching the first pattern
+      SimpleHTTP1Client.send(client, "POST", "/echo_body", [
+        "host: localhost",
+        "transfer-encoding: chunked"
+      ])
+
+      Transport.send(client, "5\r\nhello\r\n0\r\n\r\n")
+      assert {:ok, "200 OK", _headers, "hello"} = SimpleHTTP1Client.recv_reply(client)
+
+      # Keep-alive follow-up works fine in the no-trailer case
+      SimpleHTTP1Client.send(client, "GET", "/echo_method", ["host: localhost"])
+      assert {:ok, "200 OK", _headers, "GET"} = SimpleHTTP1Client.recv_reply(client)
+    end
+
+    def echo_body(conn) do
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      send_resp(conn, 200, body)
+    end
+
     def expect_chunked_body(conn) do
       assert Plug.Conn.get_req_header(conn, "transfer-encoding") == ["chunked"]
       {:ok, body, conn} = Plug.Conn.read_body(conn)

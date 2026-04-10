@@ -246,24 +246,38 @@ defmodule Bandit.HTTP1.Socket do
           {IO.iodata_to_binary(body), rest}
 
         [chunk_size, rest] ->
-          chunk_size = String.to_integer(chunk_size, 16)
+          # Strip possible extension from chunk_size
+          chunk_size =
+            chunk_size
+            |> :binary.split(";")
+            |> case do
+              [size, _ext] -> size
+              [size] -> size
+            end
+            |> String.to_integer(16)
 
-          case rest do
-            <<next_chunk::binary-size(chunk_size), ?\r, ?\n, rest::binary>> ->
-              do_read_chunked_data!(socket, rest, [body, next_chunk], read_size, read_timeout)
+          # Check for final chunk and remove possible trailers
+          if chunk_size == 0 do
+            rest = consume_trailers!(socket, rest, read_size, read_timeout)
+            {IO.iodata_to_binary(body), rest}
+          else
+            case rest do
+              <<next_chunk::binary-size(chunk_size), ?\r, ?\n, rest::binary>> ->
+                do_read_chunked_data!(socket, rest, [body, next_chunk], read_size, read_timeout)
 
-            _ ->
-              to_read = chunk_size - byte_size(rest)
+              _ ->
+                to_read = chunk_size - byte_size(rest)
 
-              if to_read > 0 do
-                iolist = read!(socket, to_read, [], read_size, read_timeout)
-                buffer = IO.iodata_to_binary([buffer | iolist])
-                do_read_chunked_data!(socket, buffer, body, read_size, read_timeout)
-              else
-                chunk = read_available!(socket, read_timeout)
-                buffer = buffer <> chunk
-                do_read_chunked_data!(socket, buffer, body, read_size, read_timeout)
-              end
+                if to_read > 0 do
+                  iolist = read!(socket, to_read, [], read_size, read_timeout)
+                  buffer = IO.iodata_to_binary([buffer | iolist])
+                  do_read_chunked_data!(socket, buffer, body, read_size, read_timeout)
+                else
+                  chunk = read_available!(socket, read_timeout)
+                  buffer = buffer <> chunk
+                  do_read_chunked_data!(socket, buffer, body, read_size, read_timeout)
+                end
+            end
           end
 
         _ ->
@@ -376,6 +390,20 @@ defmodule Bandit.HTTP1.Socket do
         :inform ->
           send!(socket.socket, [resp_line | encode_headers(headers)])
           %{socket | write_state: :unsent}
+      end
+    end
+
+    defp consume_trailers!(socket, buffer, read_size, read_timeout) do
+      case :binary.split(buffer, "\r\n") do
+        ["", rest] ->
+          rest
+
+        [_trailer, rest] ->
+          consume_trailers!(socket, rest, read_size, read_timeout)
+
+        _ ->
+          chunk = read_available!(socket, read_timeout)
+          consume_trailers!(socket, buffer <> chunk, read_size, read_timeout)
       end
     end
 
