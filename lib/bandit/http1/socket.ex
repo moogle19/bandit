@@ -246,7 +246,7 @@ defmodule Bandit.HTTP1.Socket do
           {IO.iodata_to_binary(body), rest}
 
         [chunk_size, rest] ->
-          # Strip possible extension from chunk_size
+          # Strip possible extension from chunk_size (RFC9112§7.1)
           chunk_size =
             chunk_size
             |> :binary.split(";")
@@ -256,7 +256,7 @@ defmodule Bandit.HTTP1.Socket do
             end
             |> String.to_integer(16)
 
-          # Check for final chunk and remove possible trailers
+          # Check for final chunk and remove possible trailers (RFC9112§7.1)
           if chunk_size == 0 do
             rest = consume_trailers!(socket, rest, read_size, read_timeout)
             {IO.iodata_to_binary(body), rest}
