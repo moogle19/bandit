@@ -300,8 +300,7 @@ defmodule HTTP2ProtocolTest do
       SimpleH2Client.send_window_update(socket, 0, 3_000_000)
       SimpleH2Client.send_simple_headers(socket, 1, :get, "/sendfile_large_chunked", context.port)
 
-      assert {:ok, 1, false, [{":status", "200"} | _], _ctx} =
-               SimpleH2Client.recv_headers(socket)
+      assert {:ok, 1, false, [{":status", "200"} | _], _ctx} = SimpleH2Client.recv_headers(socket)
 
       assert {:ok, 1, false, first} = SimpleH2Client.recv_body(socket)
       assert byte_size(first) > 0

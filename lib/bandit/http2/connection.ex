@@ -227,8 +227,7 @@ defmodule Bandit.HTTP2.Connection do
       :new ->
         new_stream!(connection, stream_id)
 
-        sendfile_chunk_size =
-          Keyword.get(connection.opts.http_2, :sendfile_chunk_size, 1_048_576)
+        sendfile_chunk_size = Keyword.get(connection.opts.http_2, :sendfile_chunk_size, 1_048_576)
 
         stream =
           Bandit.HTTP2.Stream.init(

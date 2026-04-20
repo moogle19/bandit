@@ -404,10 +404,12 @@ defmodule Bandit.HTTP1.Socket do
     defp safe_downcase(str) when is_binary(str), do: String.downcase(str, :ascii)
     defp safe_downcase(str), do: str
 
-    defp encode_headers(headers) do
-      headers
-      |> Enum.map(fn {k, v} -> [k, ": ", v, "\r\n"] end)
-      |> then(&[&1 | ["\r\n"]])
+    defp encode_headers([{k, v} | rest]) do
+      [k, ": ", v, "\r\n" | encode_headers(rest)]
+    end
+
+    defp encode_headers([]) do
+      ["\r\n"]
     end
 
     def send_data(%@for{write_state: :writing} = socket, data, end_request) do
