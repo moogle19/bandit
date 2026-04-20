@@ -172,8 +172,7 @@ defmodule HTTP1PlugTest do
     end
 
     def pdict(conn) do
-      existing_pdict =
-        Process.get() |> Keyword.drop(~w[$ancestors $initial_call $process_label]a)
+      existing_pdict = Process.get() |> Keyword.drop(~w[$ancestors $initial_call $process_label]a)
 
       Process.put(:garbage, :garbage)
       Process.put({:garbage, :test}, :garbage)
