@@ -48,6 +48,61 @@ defmodule Bandit.HTTP1.Socket do
 
     @max_chunk_size_byte_count 16
 
+    @known_headers [
+      :"Cache-Control",
+      :Connection,
+      :Date,
+      :Pragma,
+      :"Transfer-Encoding",
+      :Upgrade,
+      :Via,
+      :Accept,
+      :"Accept-Charset",
+      :"Accept-Encoding",
+      :"Accept-Language",
+      :Authorization,
+      :From,
+      :Host,
+      :"If-Modified-Since",
+      :"If-Match",
+      :"If-None-Match",
+      :"If-Range",
+      :"If-Unmodified-Since",
+      :"Max-Forwards",
+      :"Proxy-Authorization",
+      :Range,
+      :Referer,
+      :"User-Agent",
+      :Age,
+      :Location,
+      :"Proxy-Authenticate",
+      :Public,
+      :"Retry-After",
+      :Server,
+      :Vary,
+      :Warning,
+      :"Www-Authenticate",
+      :Allow,
+      :"Content-Base",
+      :"Content-Encoding",
+      :"Content-Language",
+      :"Content-Length",
+      :"Content-Location",
+      :"Content-Md5",
+      :"Content-Range",
+      :"Content-Type",
+      :Etag,
+      :Expires,
+      :"Last-Modified",
+      :"Accept-Ranges",
+      :"Set-Cookie",
+      :"Set-Cookie2",
+      :"X-Forwarded-For",
+      :Cookie,
+      :"Keep-Alive",
+      :"Proxy-Connection"
+    ]
+
     def peer_data(%@for{} = socket), do: Bandit.SocketHelpers.peer_data(socket.socket)
 
     def sock_data(%@for{} = socket), do: Bandit.SocketHelpers.sock_data(socket.socket)
@@ -58,7 +113,11 @@ defmodule Bandit.HTTP1.Socket do
 
     def read_headers(%@for{read_state: :unread} = socket) do
       {method, request_target, socket} = do_read_request_line!(socket)
-      {headers, socket} = do_read_headers!(socket)
+
+      max_header_length = Keyword.get(socket.opts.http_1, :max_header_length, 10_000)
+      max_header_count = Keyword.get(socket.opts.http_1, :max_header_count, 50)
+
+      {headers, socket} = do_read_headers!(socket, max_header_length, max_header_count)
       content_length = get_content_length!(headers)
       body_encoding = safe_downcase(Bandit.Headers.get_header(headers, "transfer-encoding"))
       request_connection_header = safe_downcase(Bandit.Headers.get_header(headers, "connection"))
@@ -132,24 +191,23 @@ defmodule Bandit.HTTP1.Socket do
     defp resolve_request_target!(_request_target, _method),
       do: request_error!("Unsupported request target (RFC9112§3.2)")
 
-    defp do_read_headers!(%@for{} = socket, headers \\ []) do
-      packet_size = Keyword.get(socket.opts.http_1, :max_header_length, 10_000)
+    defp do_read_headers!(socket, max_header_length, remaining_header_count, headers \\ [])
 
-      case :erlang.decode_packet(:httph_bin, socket.buffer, packet_size: packet_size) do
+    defp do_read_headers!(_socet, _max_header_length, 0, _headers),
+      do: request_error!("Too many headers", :request_header_fields_too_large)
+
+    defp do_read_headers!(%@for{} = socket, max_header_length, remaining_header_count, headers) do
+      case :erlang.decode_packet(:httph_bin, socket.buffer, packet_size: max_header_length) do
         {:more, _len} ->
           chunk = read_available!(socket.socket, socket.socket.read_timeout)
           socket = %{socket | buffer: socket.buffer <> chunk}
-          do_read_headers!(socket, headers)
+          do_read_headers!(socket, max_header_length, remaining_header_count, headers)
 
         {:ok, {:http_header, _, header, _, value}, rest} ->
           socket = %{socket | buffer: rest}
-          headers = [{header |> to_string() |> String.downcase(:ascii), value} | headers]
+          headers = [{downcase_header(header), value} | headers]
 
-          if length(headers) <= Keyword.get(socket.opts.http_1, :max_header_count, 50) do
-            do_read_headers!(socket, headers)
-          else
-            request_error!("Too many headers", :request_header_fields_too_large)
-          end
+          do_read_headers!(socket, max_header_length, remaining_header_count - 1, headers)
 
         {:ok, :http_eoh, rest} ->
           socket = %{socket | read_state: :headers_read, buffer: rest}
@@ -165,6 +223,16 @@ defmodule Bandit.HTTP1.Socket do
           request_error!("Header read unknown error: #{inspect(reason)}")
       end
     end
+
+    # Generate downcase_header function for every well-known header atom (HttpField)
+    # which can be emitted by :erlang.decode(:httph_bin, ....)
+    # Avoids allocating new binaries for every header (through `atom_to_binary`)
+    for header <- @known_headers do
+      defp downcase_header(unquote(header)),
+        do: unquote(header |> to_string() |> String.downcase(:ascii))
+    end
+
+    defp downcase_header(header) when is_binary(header), do: header |> String.downcase(:ascii)
 
     defp get_content_length!(headers) do
       case Bandit.Headers.get_content_length(headers) do
