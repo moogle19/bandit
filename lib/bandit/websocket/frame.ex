@@ -192,11 +192,23 @@ defmodule Bandit.WebSocket.Frame do
     frame
     |> Serializable.serialize()
     |> Enum.map(fn {opcode, fin, compressed, payload} ->
-      fin = if fin, do: 0x1, else: 0x0
-      compressed = if compressed, do: 0x1, else: 0x0
-      mask_and_length = payload |> IO.iodata_length() |> mask_and_length()
-      [<<fin::1, compressed::1, 0x0::2, opcode::4>>, mask_and_length, payload]
+      serialize_one(opcode, fin, compressed, payload, IO.iodata_length(payload))
     end)
+  end
+
+  # Serializes a frame whose payload length the caller has already computed, sparing a second
+  # walk of (potentially large) payload iodata. Only valid for frames which serialize to their
+  # own data as a single payload (ie: not ConnectionClose)
+  @spec serialize(frame(), non_neg_integer()) :: iolist()
+  def serialize(frame, payload_length) do
+    [{opcode, fin, compressed, payload}] = Serializable.serialize(frame)
+    [serialize_one(opcode, fin, compressed, payload, payload_length)]
+  end
+
+  defp serialize_one(opcode, fin, compressed, payload, payload_length) do
+    fin = if fin, do: 0x1, else: 0x0
+    compressed = if compressed, do: 0x1, else: 0x0
+    [<<fin::1, compressed::1, 0x0::2, opcode::4>>, mask_and_length(payload_length), payload]
   end
 
   defp mask_and_length(length) when length <= 125, do: <<0::1, length::7>>
