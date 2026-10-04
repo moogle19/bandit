@@ -39,6 +39,63 @@ defmodule HTTP2ProtocolTest do
       assert {:ok, :settings, 1, 0, <<>>} == SimpleH2Client.recv_frame(socket)
       assert {:ok, :ping, 1, 0, <<1, 2, 3, 4, 5, 6, 7, 8>>} == SimpleH2Client.recv_frame(socket)
     end
+
+    test "it should handle a large frame arriving across many small packets", context do
+      socket = SimpleH2Client.setup_connection(context)
+
+      SimpleH2Client.send_simple_headers(socket, 1, :post, "/echo", context.port)
+
+      # Send a maximally sized DATA frame in many small writes, with the final write also
+      # carrying a complete second frame to ensure we still handle frames merged in a packet
+      body = :crypto.strong_rand_bytes(16_384)
+      large_frame = <<16_384::24, 0::8, 0::8, 0::1, 1::31, body::binary>>
+      trailing_frame = <<1::24, 0::8, 1::8, 0::1, 1::31, "z">>
+
+      head = binary_part(large_frame, 0, byte_size(large_frame) - 3)
+      tail = binary_part(large_frame, byte_size(large_frame), -3)
+
+      head
+      |> Stream.unfold(fn
+        <<>> -> nil
+        <<chunk::binary-size(100), rest::binary>> -> {chunk, rest}
+        rest -> {rest, <<>>}
+      end)
+      |> Enum.each(&Transport.send(socket, &1))
+
+      Transport.send(socket, tail <> trailing_frame)
+
+      assert recv_echoed_body(socket, 1) == body <> "z"
+    end
+
+    @tag :capture_log
+    test "it should reject an oversized frame as soon as its header arrives", context do
+      socket = SimpleH2Client.setup_connection(context)
+
+      # Send only the header of an oversized frame (split over two writes) and none of its body
+      header = <<16_385::24, 0::8, 0::8, 0::1, 1::31>>
+      <<first::binary-size(4), second::binary>> = header
+      Transport.send(socket, first)
+      Process.sleep(10)
+      Transport.send(socket, second)
+
+      assert SimpleH2Client.recv_goaway_and_close(socket) == {:ok, 0, 6}
+    end
+
+    defp recv_echoed_body(socket, stream_id, acc \\ []) do
+      case SimpleH2Client.recv_frame(socket) do
+        {:ok, :window_update, _, _, _} ->
+          recv_echoed_body(socket, stream_id, acc)
+
+        {:ok, :headers, _, ^stream_id, _} ->
+          recv_echoed_body(socket, stream_id, acc)
+
+        {:ok, :data, flags, ^stream_id, data} when (flags &&& 0x01) == 0x01 ->
+          IO.iodata_to_binary([acc, data])
+
+        {:ok, :data, _flags, ^stream_id, data} ->
+          recv_echoed_body(socket, stream_id, [acc, data])
+      end
+    end
   end
 
   describe "errors and unexpected frames" do
