@@ -162,7 +162,7 @@ defmodule HTTP1TelemetryTest do
                req_body_end_time: integer(roughly: System.monotonic_time()),
                req_body_bytes: 80,
                resp_uncompressed_body_bytes: 2,
-               resp_body_bytes: 22,
+               resp_body_bytes: 28,
                resp_compression_method: "gzip",
                resp_start_time: integer(roughly: System.monotonic_time()),
                resp_end_time: integer(roughly: System.monotonic_time())

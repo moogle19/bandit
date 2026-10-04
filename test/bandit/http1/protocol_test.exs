@@ -1888,10 +1888,10 @@ defmodule HTTP1ProtocolTest do
         Req.get!(context.req, url: "/send_big_body", headers: [{"accept-encoding", "gzip"}])
 
       assert response.status == 200
-      assert response.headers["content-length"] == ["46"]
+      assert response.headers["content-length"] == ["52"]
       assert response.headers["content-encoding"] == ["gzip"]
       assert response.headers["vary"] == ["accept-encoding"]
-      assert response.body == :zlib.gzip(String.duplicate("a", 10_000))
+      assert :zlib.gunzip(response.body) == String.duplicate("a", 10_000)
     end
 
     test "writes out a response with x-gzip encoding if so negotiated", context do
@@ -1899,10 +1899,10 @@ defmodule HTTP1ProtocolTest do
         Req.get!(context.req, url: "/send_big_body", headers: [{"accept-encoding", "x-gzip"}])
 
       assert response.status == 200
-      assert response.headers["content-length"] == ["46"]
+      assert response.headers["content-length"] == ["52"]
       assert response.headers["content-encoding"] == ["x-gzip"]
       assert response.headers["vary"] == ["accept-encoding"]
-      assert response.body == :zlib.gzip(String.duplicate("a", 10_000))
+      assert :zlib.gunzip(response.body) == String.duplicate("a", 10_000)
     end
 
     # TODO Remove conditional once Erlang v28 is required
@@ -1935,11 +1935,11 @@ defmodule HTTP1ProtocolTest do
         )
 
       assert response.status == 200
-      assert response.headers["content-length"] == ["46"]
+      assert response.headers["content-length"] == ["52"]
       assert response.headers["content-encoding"] == ["gzip"]
       assert response.headers["vary"] == ["accept-encoding"]
 
-      assert response.body == :zlib.gzip(String.duplicate("a", 10_000))
+      assert :zlib.gunzip(response.body) == String.duplicate("a", 10_000)
     end
 
     test "honors q-values in accept-encoding", context do
@@ -1950,10 +1950,10 @@ defmodule HTTP1ProtocolTest do
         )
 
       assert response.status == 200
-      assert response.headers["content-length"] == ["46"]
+      assert response.headers["content-length"] == ["52"]
       assert response.headers["content-encoding"] == ["gzip"]
       assert response.headers["vary"] == ["accept-encoding"]
-      assert response.body == :zlib.gzip(String.duplicate("a", 10_000))
+      assert :zlib.gunzip(response.body) == String.duplicate("a", 10_000)
     end
 
     test "treats a q=0 in accept-encoding as a refusal of that coding", context do
@@ -1988,10 +1988,10 @@ defmodule HTTP1ProtocolTest do
         Req.get!(context.req, url: "/send_big_body", headers: [{"accept-encoding", "GZIP"}])
 
       assert response.status == 200
-      assert response.headers["content-length"] == ["46"]
+      assert response.headers["content-length"] == ["52"]
       assert response.headers["content-encoding"] == ["gzip"]
       assert response.headers["vary"] == ["accept-encoding"]
-      assert response.body == :zlib.gzip(String.duplicate("a", 10_000))
+      assert :zlib.gunzip(response.body) == String.duplicate("a", 10_000)
     end
 
     test "honors a wildcard in accept-encoding", context do
@@ -2010,10 +2010,10 @@ defmodule HTTP1ProtocolTest do
         )
 
       assert response.status == 200
-      assert response.headers["content-length"] == ["46"]
+      assert response.headers["content-length"] == ["52"]
       assert response.headers["content-encoding"] == ["gzip"]
       assert response.headers["vary"] == ["accept-encoding"]
-      assert response.body == :zlib.gzip(String.duplicate("a", 10_000))
+      assert :zlib.gunzip(response.body) == String.duplicate("a", 10_000)
     end
 
     test "treats a q=0 wildcard in accept-encoding as a refusal", context do
@@ -2051,7 +2051,7 @@ defmodule HTTP1ProtocolTest do
         )
 
       assert response.status == 200
-      assert response.headers["content-length"] == ["46"]
+      assert response.headers["content-length"] == ["52"]
       assert response.headers["content-encoding"] == ["gzip"]
       assert response.headers["vary"] == ["accept-encoding"]
     end
@@ -2184,7 +2184,7 @@ defmodule HTTP1ProtocolTest do
       assert inflated_body == String.duplicate("a", 10_000)
     end
 
-    test "does not gzip encode chunk responses", context do
+    test "gzip encodes chunk responses", context do
       response =
         Req.get!(context.req,
           url: "/send_big_body_chunked",
@@ -2192,9 +2192,9 @@ defmodule HTTP1ProtocolTest do
         )
 
       assert response.status == 200
-      assert response.headers["content-encoding"] == nil
+      assert response.headers["content-encoding"] == ["gzip"]
       assert response.headers["vary"] == ["accept-encoding"]
-      assert response.body == String.duplicate("a", 10_000)
+      assert :zlib.gunzip(response.body) == String.duplicate("a", 10_000)
     end
 
     test "falls back to no encoding if no encodings provided", context do
@@ -2274,10 +2274,10 @@ defmodule HTTP1ProtocolTest do
         Req.get!(context.req, url: "/send_weak_etag", headers: [{"accept-encoding", "gzip"}])
 
       assert response.status == 200
-      assert response.headers["content-length"] == ["46"]
+      assert response.headers["content-length"] == ["52"]
       assert response.headers["content-encoding"] == ["gzip"]
       assert response.headers["vary"] == ["accept-encoding"]
-      assert response.body == :zlib.gzip(String.duplicate("a", 10_000))
+      assert :zlib.gunzip(response.body) == String.duplicate("a", 10_000)
     end
 
     test "does no encoding if cache-control: no-transform is present in the response", context do
@@ -2369,6 +2369,27 @@ defmodule HTTP1ProtocolTest do
       :ok = :zlib.inflateEnd(inflate_context)
       :ok = :zlib.close(inflate_context)
       assert inflated_body == String.duplicate("a", 10_000)
+    end
+
+    test "respects deflate_options for gzip encoding", context do
+      context =
+        context
+        |> http_server(http_options: [deflate_options: [level: 0]])
+        |> Enum.into(context)
+
+      response =
+        Req.get!(context.req,
+          url: "/send_big_body",
+          base_url: context.base,
+          headers: [{"accept-encoding", "gzip"}]
+        )
+
+      assert response.status == 200
+      assert response.headers["content-encoding"] == ["gzip"]
+
+      # level: 0 disables compression, so the body is larger than the raw input
+      assert String.to_integer(hd(response.headers["content-length"])) > 10_000
+      assert :zlib.gunzip(response.body) == String.duplicate("a", 10_000)
     end
 
     # TODO Remove conditional once Erlang v28 is required

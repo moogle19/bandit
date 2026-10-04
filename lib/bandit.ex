@@ -103,9 +103,9 @@ defmodule Bandit do
     Defaults to `~w(zstd gzip x-gzip deflate)`, with `zstd` only being present on platforms which
     have the zstd library compiled in
   * `deflate_options`: A keyword list of options to set on the deflate library. A complete list can
-    be found at `t:deflate_options/0`. Note that these options only affect the behaviour of the
-    'deflate' content encoding; 'gzip' does not have any configurable options (this is a
-    limitation of the underlying `:zlib` library)
+    be found at `t:deflate_options/0`. These options apply to both the 'deflate' and the
+    'gzip' / 'x-gzip' content encodings (for gzip, `window_bits` is taken as the base window size
+    and clamped to 9..15, with the gzip wrapper added automatically)
   * `zstd_options`: A map of options passed verbatim to :zstd, review the options [here](https://www.erlang.org/doc/apps/stdlib/zstd.html#t:compress_parameters/0)
   * `log_exceptions_with_status_codes`: Which exceptions to log. Bandit will log only those
     exceptions whose status codes (as determined by `Plug.Exception.status/1`) match the specified
