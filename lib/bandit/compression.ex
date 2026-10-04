@@ -80,16 +80,19 @@ defmodule Bandit.Compression do
     # 206 responses are excluded since compressing them would change the bytes relative to the
     # content-range the response advertises against the identity representation, corrupting
     # range reassembly at the client
-    if status not in [204, 206, 304] && not is_nil(adapter.content_encoding) &&
-         is_nil(response_content_encoding_header) &&
-         !response_has_strong_etag(headers) && !response_indicates_no_transform(headers) &&
-         !empty_body? do
-      case start_stream(adapter.content_encoding, adapter.opts.http, streamable) do
-        {:ok, context} -> {[{"content-encoding", adapter.content_encoding} | headers], context}
-        {:error, :unsupported_encoding} -> {headers, %__MODULE__{method: :identity}}
-      end
+    # Accept-Encoding is only negotiated once the cheaper checks have established that the
+    # response is a candidate for compression at all
+    with true <-
+           status not in [204, 206, 304] && not is_nil(adapter.accept_encoding) &&
+             is_nil(response_content_encoding_header) &&
+             !response_has_strong_etag(headers) && !response_indicates_no_transform(headers) &&
+             !empty_body?,
+         content_encoding when not is_nil(content_encoding) <-
+           negotiate_content_encoding(adapter.accept_encoding, adapter.opts.http),
+         {:ok, context} <- start_stream(content_encoding, adapter.opts.http, streamable) do
+      {[{"content-encoding", content_encoding} | headers], context}
     else
-      {headers, %__MODULE__{method: :identity}}
+      _ -> {headers, %__MODULE__{method: :identity}}
     end
   end
 
