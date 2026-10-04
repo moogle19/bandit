@@ -324,6 +324,17 @@ defmodule HTTP2PlugTest do
     conn |> send_resp(200, ["O", "K"])
   end
 
+  test "sending a large body as iolist spanning multiple frames", context do
+    response = Req.get!(context.req, url: "/large_iolist_body_test")
+
+    assert response.status == 200
+    assert response.body == String.duplicate("0123456789", 5_000)
+  end
+
+  def large_iolist_body_test(conn) do
+    conn |> send_resp(200, List.duplicate(["01234", ["56789"]], 5_000))
+  end
+
   test "lazy sending a body", context do
     response = Req.get!(context.req, url: "/lazy_body_test")
 

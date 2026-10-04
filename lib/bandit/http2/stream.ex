@@ -648,14 +648,27 @@ defmodule Bandit.HTTP2.Stream do
       max(sendfile_chunk_size, 1)
     end
 
+    # The smallest SETTINGS_MAX_FRAME_SIZE a peer may advertise (RFC9113§4.2/§6.5.2). Payloads
+    # larger than this may need to be split across DATA frames by the connection process
+    @min_max_frame_size 16_384
+
     defp split_data(data, desired_length) do
       data_length = IO.iodata_length(data)
 
-      if data_length <= desired_length do
-        {data, data_length, <<>>}
-      else
-        <<to_send::binary-size(^desired_length), rest::binary>> = IO.iodata_to_binary(data)
-        {to_send, desired_length, rest}
+      cond do
+        data_length > desired_length ->
+          <<to_send::binary-size(^desired_length), rest::binary>> = IO.iodata_to_binary(data)
+          {to_send, desired_length, rest}
+
+        # Flatten large iolists here rather than in the (shared) connection process: the call
+        # then carries a single refc binary instead of copying the whole iolist, and any frame /
+        # window splitting the connection does yields cheap sub-binaries. Small iolists fit in a
+        # single frame and are passed through as-is to avoid a needless copy
+        data_length > @min_max_frame_size and not is_binary(data) ->
+          {IO.iodata_to_binary(data), data_length, <<>>}
+
+        true ->
+          {data, data_length, <<>>}
       end
     end
 
