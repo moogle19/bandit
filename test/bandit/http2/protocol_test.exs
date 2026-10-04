@@ -3229,6 +3229,21 @@ defmodule HTTP2ProtocolTest do
       SimpleH2Client.send_frame(socket, 4, 0, 0, <<>>)
       assert {:ok, :settings, 1, 0, <<>>} == SimpleH2Client.recv_frame(socket)
     end
+
+    test "the server does not signal a dynamic table size update for an unchanged header table size",
+         context do
+      socket = SimpleH2Client.tls_client(context)
+      SimpleH2Client.exchange_prefaces(socket)
+      SimpleH2Client.exchange_client_settings(socket, <<1::16, 4_096::32>>)
+
+      SimpleH2Client.send_simple_headers(socket, 1, :get, "/body_response", context.port)
+      {:ok, :headers, 4, 1, header_block} = SimpleH2Client.recv_frame(socket)
+
+      # A dynamic table size update is encoded with a 0b001 prefix (RFC7541§6.3)
+      refute match?(<<0b001::3, _::bitstring>>, header_block)
+      assert {:ok, [{":status", "200"} | _], _ctx} = HPAX.decode(header_block, HPAX.new(4096))
+      assert SimpleH2Client.recv_body(socket) == {:ok, 1, true, "OK"}
+    end
   end
 
   describe "PUSH_PROMISE frames" do
