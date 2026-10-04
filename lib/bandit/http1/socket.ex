@@ -19,7 +19,9 @@ defmodule Bandit.HTTP1.Socket do
             request_connection_header: nil,
             close_after_response: false,
             keepalive: nil,
-            opts: %{}
+            max_request_line_length: 10_000,
+            max_header_length: 10_000,
+            max_header_count: 50
 
   @typedoc "An HTTP/1 read state"
   @type read_state :: :unread | :headers_read | :read
@@ -40,9 +42,9 @@ defmodule Bandit.HTTP1.Socket do
           request_connection_header: binary(),
           close_after_response: boolean(),
           keepalive: boolean(),
-          opts: %{
-            required(:http_1) => Bandit.http_1_options()
-          }
+          max_request_line_length: pos_integer(),
+          max_header_length: pos_integer(),
+          max_header_count: non_neg_integer()
         }
 
   defimpl Bandit.HTTPTransport do
@@ -94,7 +96,7 @@ defmodule Bandit.HTTP1.Socket do
     end
 
     defp do_read_request_line!(socket, request_target \\ nil) do
-      packet_size = Keyword.get(socket.opts.http_1, :max_request_line_length, 10_000)
+      packet_size = socket.max_request_line_length
 
       case :erlang.decode_packet(:http_bin, socket.buffer, packet_size: packet_size) do
         {:more, _len} ->
@@ -147,9 +149,7 @@ defmodule Bandit.HTTP1.Socket do
       do: request_error!("Unsupported request target (RFC9112§3.2)")
 
     defp do_read_headers!(%@for{} = socket) do
-      packet_size = Keyword.get(socket.opts.http_1, :max_header_length, 10_000)
-      max_header_count = Keyword.get(socket.opts.http_1, :max_header_count, 50)
-      do_read_headers!(socket, packet_size, max_header_count, [], 0)
+      do_read_headers!(socket, socket.max_header_length, socket.max_header_count, [], 0)
     end
 
     defp do_read_headers!(socket, packet_size, max_header_count, headers, header_count) do
@@ -324,7 +324,7 @@ defmodule Bandit.HTTP1.Socket do
       case do_read_chunk_size!(socket, buffer, opts) do
         {0, rest} ->
           {trailers, fake_socket} =
-            do_read_headers!(%@for{socket: socket, buffer: rest, opts: %{http_1: []}})
+            do_read_headers!(%@for{socket: socket, buffer: rest})
 
           if trailers != [],
             do: Logger.warning("Encountered trailers in chunked request; ignoring")
