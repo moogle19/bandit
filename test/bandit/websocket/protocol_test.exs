@@ -764,6 +764,37 @@ defmodule WebSocketProtocolTest do
       assert output =~ "Received non UTF-8 text frame (RFC6455§8.1)"
     end
 
+    @tag :capture_log
+    test "server sends a 1007 on surrogate, overlong, out of range and truncated text frames",
+         context do
+      for payload <- [
+            <<0xED, 0xA0, 0x80>>,
+            <<0xC0, 0x80>>,
+            <<0xE0, 0x80, 0x80>>,
+            <<0xF0, 0x80, 0x80, 0x80>>,
+            <<0xF4, 0x90, 0x80, 0x80>>,
+            <<"ok", 0xE2, 0x9C>>
+          ] do
+        client = SimpleWebSocketClient.tcp_client(context)
+        SimpleWebSocketClient.http1_handshake(client, EchoWebSock)
+
+        SimpleWebSocketClient.send_text_frame(client, payload)
+
+        assert SimpleWebSocketClient.recv_connection_close_frame(client) == {:ok, <<1007::16>>},
+               "expected 1007 for #{inspect(payload)}"
+      end
+    end
+
+    test "server accepts multi-byte and boundary code point text frames", context do
+      client = SimpleWebSocketClient.tcp_client(context)
+      SimpleWebSocketClient.http1_handshake(client, EchoWebSock)
+
+      payload = "héllo ✓ 日本 " <> <<0xEF, 0xBF, 0xBF, 0xF4, 0x8F, 0xBF, 0xBF>>
+      SimpleWebSocketClient.send_text_frame(client, payload)
+
+      assert SimpleWebSocketClient.recv_text_frame(client) == {:ok, payload}
+    end
+
     test "server does NOT send a 1007 on a non UTF-8 text frame when so configured", context do
       context = http_server(context, websocket_options: [validate_text_frames: false])
       client = SimpleWebSocketClient.tcp_client(context)

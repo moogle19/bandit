@@ -9,6 +9,7 @@ defmodule Bandit.WebSocket.Connection do
             state: :open,
             compress: nil,
             opts: [],
+            validate_text_frames: true,
             fragment_frame: nil,
             fragment_size: 0,
             span: nil,
@@ -24,6 +25,7 @@ defmodule Bandit.WebSocket.Connection do
           state: state(),
           compress: PerMessageDeflate.t() | nil,
           opts: keyword(),
+          validate_text_frames: boolean(),
           fragment_frame: Frame.Text.t() | Frame.Binary.t() | nil,
           fragment_size: non_neg_integer(),
           span: Bandit.Telemetry.t(),
@@ -47,6 +49,7 @@ defmodule Bandit.WebSocket.Connection do
       websock_state: websock_state,
       compress: compress,
       opts: connection_opts,
+      validate_text_frames: Keyword.get(connection_opts, :validate_text_frames, true),
       span: span
     }
 
@@ -68,7 +71,7 @@ defmodule Bandit.WebSocket.Connection do
         do_inflate(frame, socket, connection)
 
       %Frame.Text{fin: true} = frame ->
-        if !Keyword.get(connection.opts, :validate_text_frames, true) || String.valid?(frame.data) do
+        if !connection.validate_text_frames || valid_utf8?(frame.data) do
           connection.websock.handle_in({frame.data, opcode: :text}, connection.websock_state)
           |> handle_continuation(socket, connection)
         else
@@ -146,6 +149,11 @@ defmodule Bandit.WebSocket.Connection do
         handle_control_frame(frame, socket, connection)
     end
   end
+
+  # Equivalent to String.valid?/1 (it rejects exactly the same surrogates, overlong encodings,
+  # out of range code points and truncated sequences), but substantially faster on both ASCII
+  # and multi-byte input
+  defp valid_utf8?(data), do: is_binary(:unicode.characters_to_binary(data))
 
   defp oversize_message?(size, opts) do
     case Keyword.get(opts, :max_fragmented_message_size, 8_000_000) do
