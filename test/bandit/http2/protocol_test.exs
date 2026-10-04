@@ -424,7 +424,7 @@ defmodule HTTP2ProtocolTest do
               [
                 {":status", "200"},
                 {"date", _date},
-                {"content-length", "40"},
+                {"content-length", "34"},
                 {"content-encoding", "deflate"},
                 {"vary", "accept-encoding"},
                 {"cache-control", "max-age=0, private, must-revalidate"}
@@ -608,7 +608,7 @@ defmodule HTTP2ProtocolTest do
               [
                 {":status", "200"},
                 {"date", _date},
-                {"content-length", "40"},
+                {"content-length", "34"},
                 {"content-encoding", "deflate"},
                 {"vary", "accept-encoding"},
                 {"cache-control", "max-age=0, private, must-revalidate"}
@@ -729,7 +729,7 @@ defmodule HTTP2ProtocolTest do
               [
                 {":status", "200"},
                 {"date", _date},
-                {"content-length", "40"},
+                {"content-length", "34"},
                 {"content-encoding", "deflate"},
                 {"vary", "accept-encoding"},
                 {"cache-control", "max-age=0, private, must-revalidate"}
@@ -892,7 +892,7 @@ defmodule HTTP2ProtocolTest do
               [
                 {":status", "200"},
                 {"date", _date},
-                {"content-length", "40"},
+                {"content-length", "34"},
                 {"content-encoding", "deflate"},
                 {"vary", "accept-encoding"},
                 {"cache-control", "max-age=0, private, must-revalidate"}
