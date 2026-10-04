@@ -587,20 +587,19 @@ defmodule Bandit.HTTP1.Socket do
       |> then(&[&1 | ["\r\n"]])
     end
 
-    def send_data(%@for{write_state: :writing} = socket, data, end_request) do
+    def send_data(%@for{write_state: :writing} = socket, data, _data_length, end_request) do
       send!(socket.socket, [socket.send_buffer | data])
       write_state = if end_request, do: :sent, else: :writing
       %{socket | write_state: write_state, send_buffer: []}
     end
 
-    def send_data(%@for{write_state: :chunking} = socket, data, end_request) do
-      byte_size = data |> IO.iodata_length()
-      send!(socket.socket, [Integer.to_string(byte_size, 16), "\r\n", data, "\r\n"])
+    def send_data(%@for{write_state: :chunking} = socket, data, data_length, end_request) do
+      send!(socket.socket, [Integer.to_string(data_length, 16), "\r\n", data, "\r\n"])
       write_state = if end_request, do: :sent, else: :chunking
       %{socket | write_state: write_state}
     end
 
-    def send_data(%@for{write_state: :chunk_streaming} = socket, data, end_request) do
+    def send_data(%@for{write_state: :chunk_streaming} = socket, data, _data_length, end_request) do
       send!(socket.socket, data)
       write_state = if end_request, do: :sent, else: :chunk_streaming
       %{socket | write_state: write_state}

@@ -142,7 +142,7 @@ defmodule Bandit.Adapter do
     adapter =
       %{adapter | metrics: metrics}
       |> send_headers(status, headers, :raw)
-      |> send_data(encoded_body, true)
+      |> send_data(encoded_body, encoded_length, true)
       |> advance_usage_counter()
 
     send(adapter.owner_pid, @already_sent)
@@ -244,18 +244,22 @@ defmodule Bandit.Adapter do
 
         adapter =
           if encoded_chunk != [] do
-            send_data(adapter, encoded_chunk, false)
+            send_data(adapter, encoded_chunk, IO.iodata_length(encoded_chunk), false)
           else
             adapter
           end
 
-        {:ok, nil, adapter |> send_data("", true) |> advance_usage_counter()}
+        {:ok, nil, adapter |> send_data("", 0, true) |> advance_usage_counter()}
       else
         {encoded_chunk, compression_context} =
           Bandit.Compression.compress_chunk(chunk, adapter.compression_context)
 
         adapter = %{adapter | compression_context: compression_context}
-        {:ok, nil, adapter |> send_data(encoded_chunk, false) |> advance_usage_counter()}
+
+        {:ok, nil,
+         adapter
+         |> send_data(encoded_chunk, IO.iodata_length(encoded_chunk), false)
+         |> advance_usage_counter()}
       end
     rescue
       error in Bandit.TransportError -> {:error, error.error}
@@ -297,11 +301,11 @@ defmodule Bandit.Adapter do
     %{adapter | transport: socket}
   end
 
-  defp send_data(adapter, data, end_request) do
+  defp send_data(adapter, data, data_length, end_request) do
     {socket, data_size} =
       if send_resp_body?(adapter) do
-        {Bandit.HTTPTransport.send_data(adapter.transport, data, end_request),
-         IO.iodata_length(data)}
+        {Bandit.HTTPTransport.send_data(adapter.transport, data, data_length, end_request),
+         data_length}
       else
         {adapter.transport, 0}
       end

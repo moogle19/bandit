@@ -30,8 +30,15 @@ defprotocol Bandit.HTTPTransport do
   @spec send_headers(t(), Plug.Conn.status(), Plug.Conn.headers(), body_disposition()) :: t()
   def send_headers(transport, status, heeaders, disposition)
 
-  @spec send_data(t(), data :: iodata(), end_request :: boolean()) :: t()
-  def send_data(transport, data, end_request)
+  # `data_length` must be equal to `IO.iodata_length(data)`; callers pass it in since they
+  # generally need to compute it anyway, saving implementations from measuring it again
+  @spec send_data(
+          t(),
+          data :: iodata(),
+          data_length :: non_neg_integer(),
+          end_request :: boolean()
+        ) :: t()
+  def send_data(transport, data, data_length, end_request)
 
   @spec sendfile(t(), Path.t(), offset :: integer(), length :: integer() | :all) :: t()
   def sendfile(transport, path, offset, length)
