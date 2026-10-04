@@ -1932,6 +1932,38 @@ defmodule HTTP2ProtocolTest do
       conn |> send_resp(200, <<>>)
     end
 
+    test "does not index sensitive or volatile response headers in the dynamic table", context do
+      socket = SimpleH2Client.setup_connection(context)
+
+      SimpleH2Client.send_simple_headers(socket, 1, :get, "/hpack_indexing", context.port)
+      {:ok, :headers, 4, 1, header_block} = SimpleH2Client.recv_frame(socket)
+      {:ok, headers, ctx} = HPAX.decode(header_block, HPAX.new(4096))
+
+      assert {"set-cookie", "session=secret"} in headers
+      assert {"etag", "\"1234\""} in headers
+      assert {"x-custom", "custom"} in headers
+
+      # set-cookie is sent as 'Literal Header Field Never Indexed' with the name taken from
+      # static table index 55 (RFC7541§6.2.3 & Appendix A)
+      assert :binary.match(header_block, <<0x1F, 40, 14, "session=secret">>) != :nomatch
+
+      stored_names = Enum.map(ctx.entries, fn {name, _value} -> name end)
+      assert "x-custom" in stored_names
+      refute "set-cookie" in stored_names
+      refute "etag" in stored_names
+      refute "content-length" in stored_names
+
+      assert SimpleH2Client.recv_body(socket) == {:ok, 1, true, "OK"}
+    end
+
+    def hpack_indexing(conn) do
+      conn
+      |> put_resp_header("set-cookie", "session=secret")
+      |> put_resp_header("etag", "\"1234\"")
+      |> put_resp_header("x-custom", "custom")
+      |> send_resp(200, "OK")
+    end
+
     test "breaks large headers into multiple CONTINUATION frames when sending", context do
       socket = SimpleH2Client.setup_connection(context)
 
