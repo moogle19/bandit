@@ -45,6 +45,30 @@ defmodule Bandit.HTTP1.Socket do
           }
         }
 
+  # Status lines for every (version, status) pair whose reason phrase Plug knows about at compile
+  # time are precomputed as literals. Codes overridden via `config :plug, :statuses` are left to the
+  # runtime path so that the phrase always comes from Plug.Conn.Status
+  @custom_statuses Application.compile_env(:plug, :statuses, %{})
+
+  @doc false
+  @spec status_line(nil | :"HTTP/1.1" | :"HTTP/1.0", Plug.Conn.int_status()) :: binary()
+  for version <- [:"HTTP/1.1", :"HTTP/1.0"],
+      status <- 100..599,
+      not Map.has_key?(@custom_statuses, status),
+      reason =
+        (try do
+           Plug.Conn.Status.reason_phrase(status)
+         rescue
+           ArgumentError -> nil
+         end),
+      reason != nil do
+    def status_line(unquote(version), unquote(status)),
+      do: unquote("#{version} #{status} #{reason}\r\n")
+  end
+
+  def status_line(version, status),
+    do: "#{version} #{status} #{Plug.Conn.Status.reason_phrase(status)}\r\n"
+
   defimpl Bandit.HTTPTransport do
     require Logger
 
@@ -487,7 +511,7 @@ defmodule Bandit.HTTP1.Socket do
     end
 
     def send_headers(%@for{write_state: :unsent} = socket, status, headers, body_disposition) do
-      resp_line = "#{socket.version} #{status} #{Plug.Conn.Status.reason_phrase(status)}\r\n"
+      resp_line = @for.status_line(socket.version, status)
 
       {headers, socket} = handle_keepalive(status, headers, socket)
       headers = remove_http_1_0_transfer_encoding(headers, socket)
