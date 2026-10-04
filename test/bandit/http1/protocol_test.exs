@@ -1346,6 +1346,75 @@ defmodule HTTP1ProtocolTest do
       send_resp(conn, 200, "OK")
     end
 
+    test "reads a chunk whose data and trailing CRLF are split across packets", context do
+      client = SimpleHTTP1Client.tcp_client(context)
+
+      SimpleHTTP1Client.send(client, "POST", "/echo_chunked_body", [
+        "Host: localhost",
+        "Transfer-encoding: chunked"
+      ])
+
+      Transport.send(client, "a\r\n01234")
+      Process.sleep(10)
+      Transport.send(client, "567")
+      Process.sleep(10)
+      Transport.send(client, "89\r")
+      Process.sleep(10)
+      Transport.send(client, "\n3\r\nabc")
+      Process.sleep(10)
+      Transport.send(client, "\r\n0\r\n\r\n")
+      assert {:ok, "200 OK", _headers, "0123456789abc"} = SimpleHTTP1Client.recv_reply(client)
+
+      # Make sure we didn't read past the end of the body by trying another request
+      SimpleHTTP1Client.send(client, "GET", "/echo_method", ["host: localhost"])
+      assert {:ok, "200 OK", _headers, "GET"} = SimpleHTTP1Client.recv_reply(client)
+    end
+
+    test "reads a chunk split across packets with a pipelined request following it", context do
+      client = SimpleHTTP1Client.tcp_client(context)
+
+      SimpleHTTP1Client.send(client, "POST", "/echo_chunked_body", [
+        "Host: localhost",
+        "Transfer-encoding: chunked"
+      ])
+
+      Transport.send(client, "5\r\nhel")
+      Process.sleep(10)
+
+      Transport.send(
+        client,
+        "lo\r\n0\r\n\r\nGET /echo_method HTTP/1.1\r\nhost: localhost\r\n\r\n"
+      )
+
+      assert {:ok, "200 OK", _headers, "hello"} = SimpleHTTP1Client.recv_reply(client)
+      assert {:ok, "200 OK", _headers, "GET"} = SimpleHTTP1Client.recv_reply(client)
+    end
+
+    def echo_chunked_body(conn) do
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      send_resp(conn, 200, body)
+    end
+
+    @tag :capture_log
+    test "rejects an invalid chunk end marker that arrives in a separate packet", context do
+      client = SimpleHTTP1Client.tcp_client(context)
+
+      SimpleHTTP1Client.send(client, "POST", "/expect_chunked_body", [
+        "Host: localhost",
+        "Transfer-encoding: chunked"
+      ])
+
+      Transport.send(client, "3\r\nAB")
+      Process.sleep(10)
+      Transport.send(client, "C\r")
+      Process.sleep(10)
+      Transport.send(client, "X")
+      assert SimpleHTTP1Client.recv_reply(client) ~> {:ok, "400 Bad Request", list(), ""}
+
+      assert_receive {:log, %{level: :error, msg: {:string, msg}}}, 500
+      assert msg == "** (Bandit.HTTPError) Malformed chunked encoding request body"
+    end
+
     test "handles a read_body call with length: 0 without falsely completing the body", context do
       client = SimpleHTTP1Client.tcp_client(context)
 
