@@ -14,7 +14,7 @@ defmodule Bandit.Adapter do
             usage_counter: nil,
             method: nil,
             status: nil,
-            content_encoding: nil,
+            accept_encoding: nil,
             compression_context: nil,
             upgrade: nil,
             expect_continue: false,
@@ -28,7 +28,7 @@ defmodule Bandit.Adapter do
           usage_counter: {:counters.counters_ref(), non_neg_integer()},
           method: Plug.Conn.method() | nil,
           status: Plug.Conn.status() | nil,
-          content_encoding: String.t(),
+          accept_encoding: String.t() | nil,
           compression_context: Bandit.Compression.t() | nil,
           upgrade: nil | {:websocket, opts :: keyword(), websocket_opts :: keyword()},
           expect_continue: boolean(),
@@ -40,17 +40,12 @@ defmodule Bandit.Adapter do
         }
 
   def init(owner_pid, transport, method, headers, opts) do
-    content_encoding =
-      Bandit.Compression.negotiate_content_encoding(
-        Bandit.Headers.get_header(headers, "accept-encoding"),
-        opts.http
-      )
-
     %__MODULE__{
       transport: transport,
       owner_pid: owner_pid,
       method: method,
-      content_encoding: content_encoding,
+      # Content encoding is negotiated lazily, only for responses which may actually be compressed
+      accept_encoding: Bandit.Headers.get_header(headers, "accept-encoding"),
       expect_continue: expect_continue?(headers, Bandit.HTTPTransport.version(transport)),
       metrics: %{req_header_end_time: Bandit.Telemetry.monotonic_time()},
       opts: opts,
