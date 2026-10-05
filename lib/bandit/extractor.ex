@@ -59,9 +59,19 @@ defmodule Bandit.Extractor do
   def pop_frame(%__MODULE__{mode: :header_parsing} = state) do
     case state.frame_parser.header_and_payload_length(state.header, state.max_frame_size) do
       {:ok, {header_length, required_length}} ->
-        state
-        |> transition_to_payload_parsing(header_length, required_length)
-        |> pop_frame()
+        frame_length = header_length + required_length
+
+        if byte_size(state.header) >= frame_length do
+          # The whole frame is already contiguous in our buffer, so deserialize it in place
+          # rather than splitting it apart only to copy it back together again
+          <<frame::binary-size(^frame_length), rest::binary>> = state.header
+          frame = state.frame_parser.deserialize(frame, state.primitive_ops_module)
+          {transition_to_header_parsing(state, rest), frame}
+        else
+          state
+          |> transition_to_payload_parsing(header_length, required_length)
+          |> pop_frame()
+        end
 
       {:error, message} ->
         {state, {:error, message}}
@@ -79,10 +89,14 @@ defmodule Bandit.Extractor do
         } = state
       ) do
     if payload_length >= required_length do
-      <<payload::binary-size(^required_length), rest::binary>> =
-        IO.iodata_to_binary(state.payload)
+      # Build the frame in a single copy, rather than once for the payload and again to
+      # prepend the header
+      frame_length = byte_size(state.header) + required_length
 
-      frame = state.frame_parser.deserialize(state.header <> payload, state.primitive_ops_module)
+      <<frame::binary-size(^frame_length), rest::binary>> =
+        IO.iodata_to_binary([state.header | state.payload])
+
+      frame = state.frame_parser.deserialize(frame, state.primitive_ops_module)
       state = transition_to_header_parsing(state, rest)
 
       {state, frame}
