@@ -352,14 +352,35 @@ defmodule Bandit.HTTP2.Connection do
   defp can_reset(n, threshold, [restart | restarts], acc, intensity, period),
     do: can_reset(n - 1, threshold, restarts, [restart | acc], intensity, period)
 
-  # Shared logic to send any pending frames upon adjustment of our send window
+  # Shared logic to send any pending frames upon adjustment of our send window. All newly
+  # sendable DATA frames are coalesced into a single socket write; streams whose pending send
+  # completed are only unblocked (in their original order) once that write has been issued
   defp do_pending_sends(socket, connection) do
-    connection.pending_sends
+    {iodata, unblocks, connection} =
+      connection.pending_sends
+      |> Enum.reverse()
+      |> Enum.reduce({[], [], %{connection | pending_sends: []}}, fn pending_send, acc ->
+        {stream_id, rest, end_stream, on_unblock, _expires_at} = pending_send
+        {iodata, unblocks, connection} = acc
+        {data_iodata, rest, connection} = split_window(stream_id, rest, end_stream, connection)
+
+        if rest == <<>> do
+          {[iodata, data_iodata], [on_unblock | unblocks], connection}
+        else
+          {[iodata, data_iodata], unblocks,
+           finish_data(stream_id, rest, end_stream, on_unblock, connection)}
+        end
+      end)
+
+    if !Bandit.SocketHelpers.iodata_empty?(iodata) do
+      ThousandIsland.Socket.send(socket, iodata)
+    end
+
+    unblocks
     |> Enum.reverse()
-    |> Enum.reduce(%{connection | pending_sends: []}, fn pending_send, connection ->
-      {stream_id, rest, end_stream, on_unblock, _expires_at} = pending_send
-      send_data(stream_id, [], rest, end_stream, on_unblock, socket, connection)
-    end)
+    |> Enum.each(& &1.(:ok))
+
+    connection
   end
 
   # Releases a queued pending send for `stream_id` (if any), replying to its blocked caller with

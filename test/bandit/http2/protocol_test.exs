@@ -3584,6 +3584,45 @@ defmodule HTTP2ProtocolTest do
       assert SimpleH2Client.recv_body(socket) == {:ok, 3, true, String.duplicate("E", 50)}
     end
 
+    test "releases all streams blocked on the connection window from a single WINDOW_UPDATE",
+         context do
+      socket = SimpleH2Client.setup_connection(context)
+
+      SimpleH2Client.send_simple_headers(socket, 1, :post, "/echo", context.port)
+
+      # Give ourselves lots of room on the stream
+      SimpleH2Client.send_window_update(socket, 1, 1_000_000)
+
+      SimpleH2Client.send_body(socket, 1, false, String.duplicate("a", 16_384))
+      SimpleH2Client.send_body(socket, 1, false, String.duplicate("b", 16_384))
+      SimpleH2Client.send_body(socket, 1, false, String.duplicate("c", 16_384))
+      SimpleH2Client.send_body(socket, 1, false, String.duplicate("d", 16_384))
+      SimpleH2Client.send_body(socket, 1, true, String.duplicate("e", 10))
+
+      assert {:ok, 0, _} = SimpleH2Client.recv_window_update(socket)
+      assert {:ok, 1, _} = SimpleH2Client.recv_window_update(socket)
+
+      assert {:ok, 1, false, [{":status", "200"} | _], ctx} = SimpleH2Client.recv_headers(socket)
+
+      # Expect 65_535 bytes as that is our initial connection window
+      assert SimpleH2Client.recv_body(socket) == {:ok, 1, false, String.duplicate("a", 16_384)}
+      assert SimpleH2Client.recv_body(socket) == {:ok, 1, false, String.duplicate("b", 16_384)}
+      assert SimpleH2Client.recv_body(socket) == {:ok, 1, false, String.duplicate("c", 16_384)}
+      assert SimpleH2Client.recv_body(socket) == {:ok, 1, false, String.duplicate("d", 16_383)}
+
+      # Start a second stream and observe that it gets blocked right away
+      SimpleH2Client.send_simple_headers(socket, 3, :post, "/echo", context.port)
+      SimpleH2Client.send_body(socket, 3, true, String.duplicate("A", 20))
+      assert SimpleH2Client.successful_response?(socket, 3, false, ctx)
+
+      # A single connection WINDOW_UPDATE should release both streams, in the order they blocked
+      SimpleH2Client.send_window_update(socket, 0, 100)
+      assert SimpleH2Client.recv_body(socket) == {:ok, 1, true, "d" <> String.duplicate("e", 10)}
+      assert SimpleH2Client.recv_body(socket) == {:ok, 3, true, String.duplicate("A", 20)}
+
+      assert SimpleH2Client.connection_alive?(socket)
+    end
+
     test "updates new stream send windows based on SETTINGS frames", context do
       socket = SimpleH2Client.setup_connection(context)
 
