@@ -25,7 +25,26 @@ defmodule Bandit.HTTP2.Handler do
     connection = Bandit.HTTP2.Connection.expire_pending_sends(state.connection)
     state = %{state | connection: connection}
 
-    (state.buffer <> data)
+    case state.buffer do
+      # We already know the size of the frame we're waiting on and still don't have all of it;
+      # accumulate without copying (or re-parsing) until the whole frame has arrived
+      {pending, pending_size, frame_size} when pending_size + byte_size(data) < frame_size ->
+        buffer = {[pending, data], pending_size + byte_size(data), frame_size}
+        {:continue, %{state | buffer: buffer}}
+
+      {pending, _pending_size, _frame_size} ->
+        handle_frames(IO.iodata_to_binary([pending, data]), socket, state)
+
+      buffer ->
+        handle_frames(buffer <> data, socket, state)
+    end
+  rescue
+    error in Bandit.HTTP2.Errors.StreamError -> rescue_stream_error(error, socket, state)
+    error -> rescue_connection_error(error, __STACKTRACE__, socket, state)
+  end
+
+  defp handle_frames(data, socket, state) do
+    data
     |> Stream.unfold(
       &Bandit.HTTP2.Frame.deserialize(&1, state.connection.local_settings.max_frame_size)
     )
@@ -33,6 +52,11 @@ defmodule Bandit.HTTP2.Handler do
       {:ok, frame}, state ->
         connection = Bandit.HTTP2.Connection.handle_frame(frame, socket, state.connection)
         {:cont, %{state | connection: connection, buffer: <<>>}}
+
+      {:more, <<length::24, _::binary>> = rest}, state when byte_size(rest) >= 9 ->
+        # We have a complete frame header (whose length Frame.deserialize/2 has already checked
+        # against max_frame_size), so we know exactly how many bytes we need to wait for
+        {:halt, %{state | buffer: {rest, byte_size(rest), 9 + length}}}
 
       {:more, rest}, state ->
         {:halt, %{state | buffer: rest}}
@@ -43,9 +67,6 @@ defmodule Bandit.HTTP2.Handler do
         raise Bandit.HTTP2.Errors.ConnectionError, message: message, error_code: error_code
     end)
     |> then(&{:continue, &1})
-  rescue
-    error in Bandit.HTTP2.Errors.StreamError -> rescue_stream_error(error, socket, state)
-    error -> rescue_connection_error(error, __STACKTRACE__, socket, state)
   end
 
   @impl ThousandIsland.Handler
