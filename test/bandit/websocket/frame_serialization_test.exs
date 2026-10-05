@@ -43,6 +43,19 @@ defmodule WebSocketFrameSerializationTest do
                [<<0x1::1, 0x0::3, 0x2::4>>, <<0::1, 127::7, 1_000_000::64>>, frame.data]
              ]
     end
+
+    test "serializes identically when given a precomputed payload length" do
+      for size <- [0, 125, 126, 65_535, 65_536],
+          data <- [String.duplicate("a", size), ["a", String.duplicate("a", max(size - 1, 0))]],
+          frame <- [
+            %Frame.Text{fin: true, data: data},
+            %Frame.Binary{fin: true, compressed: true, data: data},
+            %Frame.Ping{data: data},
+            %Frame.Pong{data: data}
+          ] do
+        assert Frame.serialize(frame, IO.iodata_length(data)) == Frame.serialize(frame)
+      end
+    end
   end
 
   describe "CONTINUATION frames" do

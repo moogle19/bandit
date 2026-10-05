@@ -36,23 +36,27 @@ defimpl Bandit.WebSocket.Socket, for: ThousandIsland.Socket do
   @spec send_frame(@for.t(), {frame_type :: @protocol.frame_type(), data :: iodata()}, boolean()) ::
           @protocol.send_frame_stats()
   def send_frame(socket, {:text, data}, compressed) do
-    do_send_frame(socket, %Frame.Text{fin: true, data: data, compressed: compressed})
-    [send_text_frame_count: 1, send_text_frame_bytes: IO.iodata_length(data)]
+    length = IO.iodata_length(data)
+    do_send_frame(socket, %Frame.Text{fin: true, data: data, compressed: compressed}, length)
+    [send_text_frame_count: 1, send_text_frame_bytes: length]
   end
 
   def send_frame(socket, {:binary, data}, compressed) do
-    do_send_frame(socket, %Frame.Binary{fin: true, data: data, compressed: compressed})
-    [send_binary_frame_count: 1, send_binary_frame_bytes: IO.iodata_length(data)]
+    length = IO.iodata_length(data)
+    do_send_frame(socket, %Frame.Binary{fin: true, data: data, compressed: compressed}, length)
+    [send_binary_frame_count: 1, send_binary_frame_bytes: length]
   end
 
   def send_frame(socket, {:ping, data}, false) do
-    do_send_frame(socket, %Frame.Ping{data: data})
-    [send_ping_frame_count: 1, send_ping_frame_bytes: IO.iodata_length(data)]
+    length = IO.iodata_length(data)
+    do_send_frame(socket, %Frame.Ping{data: data}, length)
+    [send_ping_frame_count: 1, send_ping_frame_bytes: length]
   end
 
   def send_frame(socket, {:pong, data}, false) do
-    do_send_frame(socket, %Frame.Pong{data: data})
-    [send_pong_frame_count: 1, send_pong_frame_bytes: IO.iodata_length(data)]
+    length = IO.iodata_length(data)
+    do_send_frame(socket, %Frame.Pong{data: data}, length)
+    [send_pong_frame_count: 1, send_pong_frame_bytes: length]
   end
 
   @spec close(@for.t(), non_neg_integer() | {non_neg_integer(), binary()}) ::
@@ -71,5 +75,11 @@ defimpl Bandit.WebSocket.Socket, for: ThousandIsland.Socket do
           :ok | {:error, :closed | :timeout | :inet.posix()}
   defp do_send_frame(socket, frame) do
     @for.send(socket, Frame.serialize(frame))
+  end
+
+  @spec do_send_frame(@for.t(), Frame.frame(), non_neg_integer()) ::
+          :ok | {:error, :closed | :timeout | :inet.posix()}
+  defp do_send_frame(socket, frame, payload_length) do
+    @for.send(socket, Frame.serialize(frame, payload_length))
   end
 end
