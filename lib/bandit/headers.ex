@@ -53,10 +53,30 @@ defmodule Bandit.Headers do
   @spec header_contains_token?(Plug.Conn.headers(), header :: binary(), token :: binary()) ::
           boolean()
   def header_contains_token?(headers, header, token) do
-    headers
-    |> Enum.filter(fn {name, _value} -> String.downcase(name, :ascii) == header end)
-    |> Enum.any?(fn {_name, value} -> token_list_member?(value, token) end)
+    Enum.any?(headers, fn {name, value} ->
+      header_name_matches?(name, header) and token_list_member?(value, token)
+    end)
   end
+
+  # Only downcase (and thus allocate) when the name could possibly match
+  @spec header_name_matches?(name :: binary(), header :: binary()) :: boolean()
+  defp header_name_matches?(header, header), do: true
+
+  defp header_name_matches?(name, header) when byte_size(name) == byte_size(header),
+    do: String.downcase(name, :ascii) == header
+
+  defp header_name_matches?(_name, _header), do: false
+
+  # Returns the value of the single instance of `header` in `headers`, `:none` if it is absent, or
+  # `:multiple` if it appears more than once. Used for headers which must not be repeated
+  @spec get_unique_header(Plug.Conn.headers(), header :: binary()) ::
+          {:ok, binary()} | :none | :multiple
+  defp get_unique_header([{header, value} | rest], header) do
+    if List.keymember?(rest, header, 0), do: :multiple, else: {:ok, value}
+  end
+
+  defp get_unique_header([_ | rest], header), do: get_unique_header(rest, header)
+  defp get_unique_header([], _header), do: :none
 
   # Host is special-cased (rather than using get_header/2) because, per RFC9112§3.2 /
   # RFC9110§7.2, a request MUST be rejected if it contains more than one host header,
@@ -64,10 +84,10 @@ defmodule Bandit.Headers do
   # if they agree).
   @spec get_host_header(Plug.Conn.headers()) :: {:ok, binary() | nil} | {:error, String.t()}
   def get_host_header(headers) do
-    case Enum.filter(headers, &(elem(&1, 0) == "host")) do
-      [] -> {:ok, nil}
-      [{"host", value}] -> {:ok, value}
-      _ -> {:error, "multiple host headers (RFC9112§3.2, RFC9110§7.2)"}
+    case get_unique_header(headers, "host") do
+      :none -> {:ok, nil}
+      {:ok, value} -> {:ok, value}
+      :multiple -> {:error, "multiple host headers (RFC9112§3.2, RFC9110§7.2)"}
     end
   end
 
@@ -83,10 +103,10 @@ defmodule Bandit.Headers do
   @spec get_transfer_encoding(Plug.Conn.headers()) ::
           {:ok, binary() | nil} | {:error, String.t()}
   def get_transfer_encoding(headers) do
-    case Enum.filter(headers, &(elem(&1, 0) == "transfer-encoding")) do
-      [] -> {:ok, nil}
-      [{"transfer-encoding", value}] -> {:ok, value}
-      _ -> {:error, "multiple transfer-encoding headers (RFC9112§6.1, RFC9112§6.3)"}
+    case get_unique_header(headers, "transfer-encoding") do
+      :none -> {:ok, nil}
+      {:ok, value} -> {:ok, value}
+      :multiple -> {:error, "multiple transfer-encoding headers (RFC9112§6.1, RFC9112§6.3)"}
     end
   end
 
@@ -201,10 +221,10 @@ defmodule Bandit.Headers do
           {:ok, nil | non_neg_integer()} | {:error, String.t()}
   def get_content_length(headers) do
     # We need to special case this because we don't accept multiple content-length headers
-    case Enum.filter(headers, &(elem(&1, 0) == "content-length")) do
-      [] -> {:ok, nil}
-      [{"content-length", value}] -> parse_content_length(value)
-      _ -> {:error, "invalid content-length header (RFC9112§6.3)"}
+    case get_unique_header(headers, "content-length") do
+      :none -> {:ok, nil}
+      {:ok, value} -> parse_content_length(value)
+      :multiple -> {:error, "invalid content-length header (RFC9112§6.3)"}
     end
   end
 

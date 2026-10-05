@@ -189,5 +189,39 @@ defmodule Bandit.HeadersTest do
       headers = [{"vary", "accept-language"}, {"vary", "accept-encoding"}]
       assert Headers.header_contains_token?(headers, "vary", "accept-encoding")
     end
+
+    test "does not match other headers of the same length" do
+      refute Headers.header_contains_token?(
+               [{"Very", "accept-encoding"}],
+               "vary",
+               "accept-encoding"
+             )
+    end
+  end
+
+  describe "unique header lookups" do
+    test "get_host_header/1 rejects repeated host headers, even if identical" do
+      assert Headers.get_host_header([]) == {:ok, nil}
+      assert Headers.get_host_header([{"a", "b"}, {"host", "x"}]) == {:ok, "x"}
+      assert {:error, _} = Headers.get_host_header([{"host", "x"}, {"a", "b"}, {"host", "x"}])
+    end
+
+    test "get_transfer_encoding/1 rejects repeated transfer-encoding headers" do
+      assert Headers.get_transfer_encoding([]) == {:ok, nil}
+      assert Headers.get_transfer_encoding([{"transfer-encoding", "chunked"}]) == {:ok, "chunked"}
+
+      assert {:error, _} =
+               Headers.get_transfer_encoding([
+                 {"transfer-encoding", "chunked"},
+                 {"transfer-encoding", "chunked"}
+               ])
+    end
+
+    test "get_content_length/1 rejects repeated content-length headers, even if identical" do
+      assert Headers.get_content_length([{"host", "x"}]) == {:ok, nil}
+
+      assert {:error, _} =
+               Headers.get_content_length([{"content-length", "1"}, {"content-length", "1"}])
+    end
   end
 end
