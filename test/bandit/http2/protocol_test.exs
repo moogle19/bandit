@@ -458,15 +458,14 @@ defmodule HTTP2ProtocolTest do
               [
                 {":status", "200"},
                 {"date", _date},
-                {"content-length", "46"},
+                {"content-length", "52"},
                 {"content-encoding", "gzip"},
                 {"vary", "accept-encoding"},
                 {"cache-control", "max-age=0, private, must-revalidate"}
               ], _ctx} = SimpleH2Client.recv_headers(socket)
 
-      expected = :zlib.gzip(String.duplicate("a", 10_000))
-
-      assert SimpleH2Client.recv_body(socket) == {:ok, 1, true, expected}
+      assert {:ok, 1, true, body} = SimpleH2Client.recv_body(socket)
+      assert :zlib.gunzip(body) == String.duplicate("a", 10_000)
     end
 
     test "writes out a response with x-gzip encoding if so negotiated", context do
@@ -486,15 +485,14 @@ defmodule HTTP2ProtocolTest do
               [
                 {":status", "200"},
                 {"date", _date},
-                {"content-length", "46"},
+                {"content-length", "52"},
                 {"content-encoding", "x-gzip"},
                 {"vary", "accept-encoding"},
                 {"cache-control", "max-age=0, private, must-revalidate"}
               ], _ctx} = SimpleH2Client.recv_headers(socket)
 
-      expected = :zlib.gzip(String.duplicate("a", 10_000))
-
-      assert SimpleH2Client.recv_body(socket) == {:ok, 1, true, expected}
+      assert {:ok, 1, true, body} = SimpleH2Client.recv_body(socket)
+      assert :zlib.gunzip(body) == String.duplicate("a", 10_000)
     end
 
     # TODO Remove conditional once Erlang v28 is required
@@ -554,14 +552,14 @@ defmodule HTTP2ProtocolTest do
               [
                 {":status", "200"},
                 {"date", _date},
-                {"content-length", "46"},
+                {"content-length", "52"},
                 {"content-encoding", "gzip"},
                 {"vary", "accept-encoding"},
                 {"cache-control", "max-age=0, private, must-revalidate"}
               ], _ctx} = SimpleH2Client.recv_headers(socket)
 
-      expected = :zlib.gzip(String.duplicate("a", 10_000))
-      assert SimpleH2Client.recv_body(socket) == {:ok, 1, true, expected}
+      assert {:ok, 1, true, body} = SimpleH2Client.recv_body(socket)
+      assert :zlib.gunzip(body) == String.duplicate("a", 10_000)
     end
 
     test "honors q-values in accept-encoding", context do
@@ -581,14 +579,14 @@ defmodule HTTP2ProtocolTest do
               [
                 {":status", "200"},
                 {"date", _date},
-                {"content-length", "46"},
+                {"content-length", "52"},
                 {"content-encoding", "gzip"},
                 {"vary", "accept-encoding"},
                 {"cache-control", "max-age=0, private, must-revalidate"}
               ], _ctx} = SimpleH2Client.recv_headers(socket)
 
-      expected = :zlib.gzip(String.duplicate("a", 10_000))
-      assert SimpleH2Client.recv_body(socket) == {:ok, 1, true, expected}
+      assert {:ok, 1, true, body} = SimpleH2Client.recv_body(socket)
+      assert :zlib.gunzip(body) == String.duplicate("a", 10_000)
     end
 
     test "treats a q=0 in accept-encoding as a refusal of that coding", context do
@@ -668,14 +666,14 @@ defmodule HTTP2ProtocolTest do
               [
                 {":status", "200"},
                 {"date", _date},
-                {"content-length", "46"},
+                {"content-length", "52"},
                 {"content-encoding", "gzip"},
                 {"vary", "accept-encoding"},
                 {"cache-control", "max-age=0, private, must-revalidate"}
               ], _ctx} = SimpleH2Client.recv_headers(socket)
 
-      expected = :zlib.gzip(String.duplicate("a", 10_000))
-      assert SimpleH2Client.recv_body(socket) == {:ok, 1, true, expected}
+      assert {:ok, 1, true, body} = SimpleH2Client.recv_body(socket)
+      assert :zlib.gunzip(body) == String.duplicate("a", 10_000)
     end
 
     test "honors a wildcard in accept-encoding", context do
@@ -702,14 +700,14 @@ defmodule HTTP2ProtocolTest do
               [
                 {":status", "200"},
                 {"date", _date},
-                {"content-length", "46"},
+                {"content-length", "52"},
                 {"content-encoding", "gzip"},
                 {"vary", "accept-encoding"},
                 {"cache-control", "max-age=0, private, must-revalidate"}
               ], _ctx} = SimpleH2Client.recv_headers(socket)
 
-      expected = :zlib.gzip(String.duplicate("a", 10_000))
-      assert SimpleH2Client.recv_body(socket) == {:ok, 1, true, expected}
+      assert {:ok, 1, true, body} = SimpleH2Client.recv_body(socket)
+      assert :zlib.gunzip(body) == String.duplicate("a", 10_000)
     end
 
     test "treats a q=0 wildcard in accept-encoding as a refusal", context do
@@ -789,14 +787,14 @@ defmodule HTTP2ProtocolTest do
               [
                 {":status", "200"},
                 {"date", _date},
-                {"content-length", "46"},
+                {"content-length", "52"},
                 {"content-encoding", "gzip"},
                 {"vary", "accept-encoding"},
                 {"cache-control", "max-age=0, private, must-revalidate"}
               ], _ctx} = SimpleH2Client.recv_headers(socket)
 
-      expected = :zlib.gzip(String.duplicate("a", 10_000))
-      assert SimpleH2Client.recv_body(socket) == {:ok, 1, true, expected}
+      assert {:ok, 1, true, body} = SimpleH2Client.recv_body(socket)
+      assert :zlib.gunzip(body) == String.duplicate("a", 10_000)
     end
 
     test "does not indicate content encoding or vary for 204 responses", context do
@@ -980,16 +978,15 @@ defmodule HTTP2ProtocolTest do
               [
                 {":status", "200"},
                 {"date", _date},
-                {"content-length", "46"},
+                {"content-length", "52"},
                 {"content-encoding", "gzip"},
                 {"vary", "accept-encoding"},
                 {"cache-control", "max-age=0, private, must-revalidate"},
                 {"etag", "W/\"1234\""}
               ], _ctx} = SimpleH2Client.recv_headers(socket)
 
-      expected = :zlib.gzip(String.duplicate("a", 10_000))
-
-      assert SimpleH2Client.recv_body(socket) == {:ok, 1, true, expected}
+      assert {:ok, 1, true, body} = SimpleH2Client.recv_body(socket)
+      assert :zlib.gunzip(body) == String.duplicate("a", 10_000)
     end
 
     test "does no encoding if a malformed etag starting with W but not W/ is present", context do
@@ -1444,7 +1441,7 @@ defmodule HTTP2ProtocolTest do
       assert inflated_body == "OKDOKEE"
     end
 
-    test "does not gzip encode DATA frames when chunking", context do
+    test "gzip encodes multiple DATA frames when chunking", context do
       socket = SimpleH2Client.setup_connection(context)
 
       headers = [
@@ -1461,12 +1458,17 @@ defmodule HTTP2ProtocolTest do
               [
                 {":status", "200"},
                 {"date", _date},
+                {"content-encoding", "gzip"},
                 {"vary", "accept-encoding"},
                 {"cache-control", "max-age=0, private, must-revalidate"}
               ], _ctx} = SimpleH2Client.recv_headers(socket)
 
-      assert {:ok, 1, false, "OK"} == SimpleH2Client.recv_body(socket)
-      assert {:ok, 1, false, "DOKEE"} == SimpleH2Client.recv_body(socket)
+      {:ok, 1, false, chunk_1} = SimpleH2Client.recv_body(socket)
+      {:ok, 1, false, chunk_2} = SimpleH2Client.recv_body(socket)
+      {:ok, 1, false, chunk_3} = SimpleH2Client.recv_body(socket)
+      assert {:ok, 1, true, ""} == SimpleH2Client.recv_body(socket)
+
+      assert :zlib.gunzip(IO.iodata_to_binary([chunk_1, chunk_2, chunk_3])) == "OKDOKEE"
     end
 
     test "does not write out a body for a chunked response to a HEAD request", context do

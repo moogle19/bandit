@@ -112,24 +112,17 @@ defmodule Bandit.Compression do
     Bandit.Headers.header_contains_token?(headers, "cache-control", "no-transform")
   end
 
-  defp start_stream("deflate", http_opts, _streamable) do
-    opts = Keyword.get(http_opts, :deflate_options, [])
-    deflate_context = :zlib.open()
+  defp start_stream("deflate", http_opts, _streamable),
+    do: {:ok, %__MODULE__{method: :deflate, lib_context: deflate_init(http_opts, & &1)}}
 
-    :zlib.deflateInit(
-      deflate_context,
-      Keyword.get(opts, :level, :default),
-      :deflated,
-      Keyword.get(opts, :window_bits, 15),
-      Keyword.get(opts, :mem_level, 8),
-      Keyword.get(opts, :strategy, :default)
-    )
-
-    {:ok, %__MODULE__{method: :deflate, lib_context: deflate_context}}
+  # gzip is the same deflate stream wrapped in a gzip header & trailer, which zlib emits for us
+  # when 16 is added to window_bits. This lets gzip honour deflate_options and stream chunks.
+  # zlib rejects a gzip window_bits of 8 (and negative / already-offset values make no sense
+  # here), so clamp the configured base value into 9..15 first
+  defp start_stream(encoding, http_opts, _streamable) when encoding in ["gzip", "x-gzip"] do
+    gzip_window_bits = &(16 + (&1 |> abs() |> max(9) |> min(15)))
+    {:ok, %__MODULE__{method: :gzip, lib_context: deflate_init(http_opts, gzip_window_bits)}}
   end
-
-  defp start_stream("x-gzip", _opts, false), do: {:ok, %__MODULE__{method: :gzip}}
-  defp start_stream("gzip", _opts, false), do: {:ok, %__MODULE__{method: :gzip}}
 
   if Code.ensure_loaded?(:zstd) do
     defp start_stream("zstd", http_opts, false) do
@@ -142,7 +135,24 @@ defmodule Bandit.Compression do
 
   defp start_stream(_encoding, _opts, _streamable), do: {:error, :unsupported_encoding}
 
-  def compress_chunk(chunk, %__MODULE__{method: :deflate} = context) do
+  defp deflate_init(http_opts, window_bits_fun) do
+    opts = Keyword.get(http_opts, :deflate_options, [])
+    deflate_context = :zlib.open()
+
+    :zlib.deflateInit(
+      deflate_context,
+      Keyword.get(opts, :level, :default),
+      :deflated,
+      window_bits_fun.(Keyword.get(opts, :window_bits, 15)),
+      Keyword.get(opts, :mem_level, 8),
+      Keyword.get(opts, :strategy, :default)
+    )
+
+    deflate_context
+  end
+
+  def compress_chunk(chunk, %__MODULE__{method: method} = context)
+      when method in [:deflate, :gzip] do
     result = :zlib.deflate(context.lib_context, chunk, :sync)
 
     context =
@@ -164,17 +174,6 @@ defmodule Bandit.Compression do
     end
   end
 
-  def compress_chunk(chunk, %__MODULE__{method: :gzip, lib_context: nil} = context) do
-    result = :zlib.gzip(chunk)
-
-    context =
-      context
-      |> Map.update!(:bytes_in, &(&1 + IO.iodata_length(chunk)))
-      |> Map.put(:lib_context, :done)
-
-    {result, context}
-  end
-
   def compress_chunk(chunk, %__MODULE__{method: :identity} = context) do
     {chunk, context}
   end
@@ -193,7 +192,8 @@ defmodule Bandit.Compression do
     end
   end
 
-  defp close_context(%__MODULE__{method: :deflate, lib_context: lib_context}) do
+  defp close_context(%__MODULE__{method: method, lib_context: lib_context})
+       when method in [:deflate, :gzip] do
     last = :zlib.deflate(lib_context, [], :finish)
     :ok = :zlib.deflateEnd(lib_context)
     :zlib.close(lib_context)
