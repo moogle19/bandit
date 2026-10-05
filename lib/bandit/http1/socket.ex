@@ -336,23 +336,43 @@ defmodule Bandit.HTTP1.Socket do
           read_size = Keyword.get(opts, :read_length, 1_000_000)
           read_timeout = Keyword.get(opts, :read_timeout, 15_000)
 
-          {to_return, rest} = read_exactly!(socket, rest, to_read, read_size, read_timeout)
-
           case chunk_size - to_read do
             0 ->
-              {newline, rest} = read_exactly!(socket, rest, 2, read_size, read_timeout)
+              # Read the chunk's data and its trailing \r\n in one go, so that a chunk which
+              # extends past what we have buffered doesn't need a separate recv for the \r\n.
+              # This reads exactly up to the end of the \r\n and never beyond it
+              {to_return, rest} =
+                read_exactly!(socket, rest, to_read + 2, read_size, read_timeout)
 
-              if IO.iodata_to_binary(newline) != "\r\n",
-                do: request_error!("Malformed chunked encoding request body")
-
-              {:chunk, to_return, rest}
+              {:chunk, strip_chunk_crlf!(to_return), rest}
 
             remaining when remaining > 0 ->
+              {to_return, rest} = read_exactly!(socket, rest, to_read, read_size, read_timeout)
+
               # Build a binary since we'll be passing it to read_chunk_size! which expects a binary
               {:chunk, to_return, Integer.to_string(remaining, 16) <> "\r\n" <> rest}
           end
       end
     end
+
+    # Validates and removes the \r\n that terminates a chunk's data. The data comes from
+    # read_exactly!/5, so it is either a binary or an improper list whose tail is the binary most
+    # recently received. Strip the \r\n from that binary where we can, so as to avoid copying the
+    # whole chunk just to remove its last two bytes
+    @dialyzer {:no_improper_lists, strip_chunk_crlf!: 1}
+    defp strip_chunk_crlf!(data) when is_binary(data) do
+      data_size = byte_size(data) - 2
+
+      case data do
+        <<chunk::binary-size(^data_size), "\r\n">> -> chunk
+        _ -> request_error!("Malformed chunked encoding request body")
+      end
+    end
+
+    defp strip_chunk_crlf!([head | tail]) when is_binary(tail) and byte_size(tail) >= 2,
+      do: [head | strip_chunk_crlf!(tail)]
+
+    defp strip_chunk_crlf!(data), do: data |> IO.iodata_to_binary() |> strip_chunk_crlf!()
 
     # Reads the chunk header, taking care to only read up to @max_chunk_size_byte_count bytes to do so. Protects
     # against arbitrarily long chunk headers per RFC9112§7.1
