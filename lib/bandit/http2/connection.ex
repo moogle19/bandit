@@ -111,11 +111,19 @@ defmodule Bandit.HTTP2.Connection do
     # Merge whatever new settings were sent with our existing remote settings
     remote_settings = struct(connection.remote_settings, frame.settings)
 
-    send_hpack_state = HPAX.resize(connection.send_hpack_state, remote_settings.header_table_size)
+    # Only resize when the size actually changes; HPAX.resize/2 otherwise queues a redundant
+    # dynamic table size update onto the next header block we send
+    send_hpack_state =
+      if remote_settings.header_table_size == connection.remote_settings.header_table_size,
+        do: connection.send_hpack_state,
+        else: HPAX.resize(connection.send_hpack_state, remote_settings.header_table_size)
+
     delta = remote_settings.initial_window_size - connection.remote_settings.initial_window_size
 
-    Bandit.HTTP2.StreamCollection.get_pids(connection.streams)
-    |> Enum.each(&Bandit.HTTP2.Stream.deliver_send_window_update(&1, delta))
+    if delta != 0 do
+      Bandit.HTTP2.StreamCollection.get_pids(connection.streams)
+      |> Enum.each(&Bandit.HTTP2.Stream.deliver_send_window_update(&1, delta))
+    end
 
     do_pending_sends(socket, %{
       connection
