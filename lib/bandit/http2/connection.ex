@@ -447,8 +447,15 @@ defmodule Bandit.HTTP2.Connection do
     finish_data(stream_id, rest, end_stream, on_unblock, connection)
   end
 
+  # Header values which are sensitive (and so must not be indexed by this or any intermediary
+  # encoder, per RFC7541§7.1.3), or which vary per-response and would only evict more useful entries
+  # from the dynamic table. Date is deliberately left indexable: it is identical across all
+  # responses sent within the same second, so storing it is a net win on busy connections
+  @never_store_headers ~w[set-cookie authorization proxy-authorization]
+  @no_store_headers ~w[content-length etag last-modified]
+
   defp encode_headers(stream_id, headers, end_stream, connection) do
-    enc_headers = Enum.map(headers, fn {key, value} -> {:store, key, value} end)
+    enc_headers = Enum.map(headers, fn {key, value} -> {hpack_action(key), key, value} end)
     {block, send_hpack_state} = HPAX.encode(enc_headers, connection.send_hpack_state)
 
     iodata =
@@ -463,6 +470,10 @@ defmodule Bandit.HTTP2.Connection do
 
     {iodata, %{connection | send_hpack_state: send_hpack_state}}
   end
+
+  defp hpack_action(key) when key in @never_store_headers, do: :never_store
+  defp hpack_action(key) when key in @no_store_headers, do: :no_store
+  defp hpack_action(_key), do: :store
 
   defp split_window(stream_id, data, end_stream, connection) do
     max_bytes_to_send = max(connection.send_window_size, 0)
