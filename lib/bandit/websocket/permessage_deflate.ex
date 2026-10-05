@@ -126,7 +126,7 @@ defmodule Bandit.WebSocket.PerMessageDeflate do
   def inflate(data, %__MODULE__{} = context) do
     safe_inflate(
       context.inflate_context,
-      :zlib.safeInflate(context.inflate_context, <<data::binary, 0x00, 0x00, 0xFF, 0xFF>>),
+      :zlib.safeInflate(context.inflate_context, [data, <<0x00, 0x00, 0xFF, 0xFF>>]),
       [],
       byte_size(data) * context.max_inflate_ratio
     )
