@@ -1870,7 +1870,7 @@ defmodule HTTP1ProtocolTest do
         Req.get!(context.req, url: "/send_big_body", headers: [{"accept-encoding", "deflate"}])
 
       assert response.status == 200
-      assert response.headers["content-length"] == ["40"]
+      assert response.headers["content-length"] == ["34"]
       assert response.headers["content-encoding"] == ["deflate"]
       assert response.headers["vary"] == ["accept-encoding"]
 
@@ -1881,6 +1881,9 @@ defmodule HTTP1ProtocolTest do
       :ok = :zlib.close(inflate_context)
 
       assert inflated_body == String.duplicate("a", 10_000)
+
+      # A non-streamed body is deflated in one shot, with no trailing sync flush block
+      assert response.body == :zlib.compress(String.duplicate("a", 10_000))
     end
 
     test "writes out a response with gzip encoding if so negotiated", context do
@@ -1964,7 +1967,7 @@ defmodule HTTP1ProtocolTest do
         )
 
       assert response.status == 200
-      assert response.headers["content-length"] == ["40"]
+      assert response.headers["content-length"] == ["34"]
       assert response.headers["content-encoding"] == ["deflate"]
       assert response.headers["vary"] == ["accept-encoding"]
     end
@@ -2024,7 +2027,7 @@ defmodule HTTP1ProtocolTest do
         )
 
       assert response.status == 200
-      assert response.headers["content-length"] == ["40"]
+      assert response.headers["content-length"] == ["34"]
       assert response.headers["content-encoding"] == ["deflate"]
       assert response.headers["vary"] == ["accept-encoding"]
     end
@@ -2152,7 +2155,7 @@ defmodule HTTP1ProtocolTest do
         Req.get!(context.req, url: "/send_iolist_body", headers: [{"accept-encoding", "deflate"}])
 
       assert response.status == 200
-      assert response.headers["content-length"] == ["40"]
+      assert response.headers["content-length"] == ["34"]
       assert response.headers["content-encoding"] == ["deflate"]
       assert response.headers["vary"] == ["accept-encoding"]
 
@@ -2359,7 +2362,7 @@ defmodule HTTP1ProtocolTest do
       assert response.headers["content-encoding"] == ["deflate"]
 
       # level: 0 disables compression, so the "compressed" body is only a few bytes
-      # larger than the raw input, rather than the 40 bytes achieved at the default level
+      # larger than the raw input, rather than the 34 bytes achieved at the default level
       # (see the "writes out a response with deflate encoding" test above)
       assert String.to_integer(hd(response.headers["content-length"])) > 10_000
 

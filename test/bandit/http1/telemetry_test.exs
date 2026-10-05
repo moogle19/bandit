@@ -177,6 +177,26 @@ defmodule HTTP1TelemetryTest do
              }
     end
 
+    test "it should report compressed resp_body_bytes for deflate encoded responses", context do
+      Req.post!(context.req,
+        url: "/do_read_body",
+        body: String.duplicate("a", 80),
+        headers: [{"accept-encoding", "deflate"}]
+      )
+
+      assert_receive {:telemetry, [:bandit, :request, :stop], measurements, _metadata}, 500
+
+      assert Map.take(measurements, [
+               :resp_uncompressed_body_bytes,
+               :resp_body_bytes,
+               :resp_compression_method
+             ]) == %{
+               resp_uncompressed_body_bytes: 2,
+               resp_body_bytes: byte_size(:zlib.compress("OK")),
+               resp_compression_method: "deflate"
+             }
+    end
+
     test "it should add (some) resp metrics to `stop` events for chunked responses", context do
       Req.get!(context.req, url: "/send_chunked_200")
 

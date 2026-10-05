@@ -1,13 +1,14 @@
 defmodule Bandit.Compression do
   @moduledoc false
 
-  defstruct method: nil, bytes_in: 0, lib_context: nil
+  defstruct method: nil, bytes_in: 0, lib_context: nil, streamable: true
 
   @typedoc "A struct containing the context for response compression"
   @type t :: %__MODULE__{
           method: :deflate | :gzip | :identity | :zstd,
           bytes_in: non_neg_integer(),
-          lib_context: term()
+          lib_context: term(),
+          streamable: boolean()
         }
 
   @accepted_encodings ~w(gzip x-gzip deflate)
@@ -112,7 +113,7 @@ defmodule Bandit.Compression do
     Bandit.Headers.header_contains_token?(headers, "cache-control", "no-transform")
   end
 
-  defp start_stream("deflate", http_opts, _streamable) do
+  defp start_stream("deflate", http_opts, streamable) do
     opts = Keyword.get(http_opts, :deflate_options, [])
     deflate_context = :zlib.open()
 
@@ -125,7 +126,7 @@ defmodule Bandit.Compression do
       Keyword.get(opts, :strategy, :default)
     )
 
-    {:ok, %__MODULE__{method: :deflate, lib_context: deflate_context}}
+    {:ok, %__MODULE__{method: :deflate, lib_context: deflate_context, streamable: streamable}}
   end
 
   defp start_stream("x-gzip", _opts, false), do: {:ok, %__MODULE__{method: :gzip}}
@@ -143,7 +144,10 @@ defmodule Bandit.Compression do
   defp start_stream(_encoding, _opts, _streamable), do: {:error, :unsupported_encoding}
 
   def compress_chunk(chunk, %__MODULE__{method: :deflate} = context) do
-    result = :zlib.deflate(context.lib_context, chunk, :sync)
+    # A non-streamable context only ever sees a single chunk, so we can finish the stream
+    # right away rather than emitting a sync flush here and a separate (empty) finish on close
+    flush = if context.streamable, do: :sync, else: :finish
+    result = :zlib.deflate(context.lib_context, chunk, flush)
 
     context =
       context
@@ -193,8 +197,8 @@ defmodule Bandit.Compression do
     end
   end
 
-  defp close_context(%__MODULE__{method: :deflate, lib_context: lib_context}) do
-    last = :zlib.deflate(lib_context, [], :finish)
+  defp close_context(%__MODULE__{method: :deflate, lib_context: lib_context} = context) do
+    last = if context.streamable, do: :zlib.deflate(lib_context, [], :finish), else: []
     :ok = :zlib.deflateEnd(lib_context)
     :zlib.close(lib_context)
     last
