@@ -45,6 +45,79 @@ defmodule Bandit.HTTP1.Socket do
           }
         }
 
+  # The field names which `:erlang.decode_packet(:httph_bin, ...)` returns as atoms rather than
+  # binaries (the `HttpField` type in OTP's erlang:decode_packet/3 spec)
+  @httph_field_atoms [
+    :"Cache-Control",
+    :Connection,
+    :Date,
+    :Pragma,
+    :"Transfer-Encoding",
+    :Upgrade,
+    :Via,
+    :Accept,
+    :"Accept-Charset",
+    :"Accept-Encoding",
+    :"Accept-Language",
+    :Authorization,
+    :From,
+    :Host,
+    :"If-Modified-Since",
+    :"If-Match",
+    :"If-None-Match",
+    :"If-Range",
+    :"If-Unmodified-Since",
+    :"Max-Forwards",
+    :"Proxy-Authorization",
+    :Range,
+    :Referer,
+    :"User-Agent",
+    :Age,
+    :Location,
+    :"Proxy-Authenticate",
+    :Public,
+    :"Retry-After",
+    :Server,
+    :Vary,
+    :Warning,
+    :"Www-Authenticate",
+    :Allow,
+    :"Content-Base",
+    :"Content-Encoding",
+    :"Content-Language",
+    :"Content-Length",
+    :"Content-Location",
+    :"Content-Md5",
+    :"Content-Range",
+    :"Content-Type",
+    :Etag,
+    :Expires,
+    :"Last-Modified",
+    :"Accept-Ranges",
+    :"Set-Cookie",
+    :"Set-Cookie2",
+    :"X-Forwarded-For",
+    :Cookie,
+    :"Keep-Alive",
+    :"Proxy-Connection"
+  ]
+
+  @doc false
+  @spec httph_field_atoms() :: [atom()]
+  def httph_field_atoms, do: @httph_field_atoms
+
+  # Lowercases a header name as returned by `:erlang.decode_packet(:httph_bin, ...)`. Well-known
+  # names come back as atoms; map those directly to literal binaries instead of allocating twice
+  # (once for the atom's string and again for its lowercased copy)
+  @doc false
+  @spec downcase_header_name(atom() | binary()) :: binary()
+  for atom <- @httph_field_atoms do
+    def downcase_header_name(unquote(atom)),
+      do: unquote(atom |> to_string() |> String.downcase(:ascii))
+  end
+
+  def downcase_header_name(header), do: header |> to_string() |> String.downcase(:ascii)
+
   defimpl Bandit.HTTPTransport do
     require Logger
 
@@ -162,7 +235,7 @@ defmodule Bandit.HTTP1.Socket do
         {:ok, {:http_header, _, header, _, value}, rest} ->
           validate_field_value!(value)
           socket = %{socket | buffer: rest}
-          headers = [{header |> to_string() |> String.downcase(:ascii), value} | headers]
+          headers = [{@for.downcase_header_name(header), value} | headers]
           header_count = header_count + 1
 
           if header_count <= max_header_count do
