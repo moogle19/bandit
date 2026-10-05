@@ -534,7 +534,7 @@ defmodule Bandit.HTTP2.Stream do
       end)
     end
 
-    def send_data(%@for{state: state} = stream, data, end_stream)
+    def send_data(%@for{state: state} = stream, data, data_length, end_stream)
         when state in [:open, :remote_closed] do
       stream =
         receive do
@@ -545,7 +545,7 @@ defmodule Bandit.HTTP2.Stream do
         end
 
       max_bytes_to_send = max(stream.send_window_size, 0)
-      {data_to_send, bytes_to_send, rest} = split_data(data, max_bytes_to_send)
+      {data_to_send, bytes_to_send, rest} = split_data(data, data_length, max_bytes_to_send)
       end_stream_to_send = end_stream && byte_size(rest) == 0
 
       stream =
@@ -581,7 +581,7 @@ defmodule Bandit.HTTP2.Stream do
           {:bandit, {:send_window_update, delta}} ->
             stream
             |> do_recv_send_window_update(delta)
-            |> send_data(rest, end_stream)
+            |> send_data(rest, byte_size(rest), end_stream)
 
           # Observe a client reset promptly rather than sitting blocked until read_timeout
           # (after which we would send an RST_STREAM of our own, which RFC9113§6.4 forbids
@@ -604,7 +604,7 @@ defmodule Bandit.HTTP2.Stream do
         {:ok, fd} ->
           try do
             if length == 0 do
-              send_data(stream, "", true)
+              send_data(stream, "", 0, true)
             else
               sendfile_loop(stream, fd, offset, length, 0)
             end
@@ -628,7 +628,7 @@ defmodule Bandit.HTTP2.Stream do
         {:ok, data} ->
           now_sent = byte_size(data)
           end_stream = sent + now_sent >= length
-          stream = send_data(stream, data, end_stream)
+          stream = send_data(stream, data, now_sent, end_stream)
 
           if end_stream do
             stream
@@ -648,9 +648,7 @@ defmodule Bandit.HTTP2.Stream do
       max(sendfile_chunk_size, 1)
     end
 
-    defp split_data(data, desired_length) do
-      data_length = IO.iodata_length(data)
-
+    defp split_data(data, data_length, desired_length) do
       if data_length <= desired_length do
         {data, data_length, <<>>}
       else
