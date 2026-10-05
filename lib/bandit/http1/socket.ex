@@ -452,6 +452,12 @@ defmodule Bandit.HTTP1.Socket do
           actual_read_size = min(bytes_still_to_read, read_size)
 
           case ThousandIsland.Socket.recv(socket, actual_read_size, read_timeout) do
+            {:ok, data} when byte_size(data) > 0 and buffer == <<>> ->
+              # Avoid wrapping the received data when we have nothing buffered, so that the
+              # common case of a body read entirely off the wire is returned as the received
+              # binary itself and callers can skip a (potentially large) binary conversion
+              read_exactly!(socket, data, to_read, read_size, read_timeout)
+
             {:ok, data} when byte_size(data) > 0 ->
               read_exactly!(socket, [buffer | data], to_read, read_size, read_timeout)
 
